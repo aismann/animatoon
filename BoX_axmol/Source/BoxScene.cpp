@@ -333,9 +333,7 @@ void BoxScene::draw()
     }
     else
     {
-        const Color water(0.1f, 0.35f, 0.95f, 0.85f);
-        for (b2BodyId id : _parts)
-            _draw->drawDot(px(toV(b2Body_GetPosition(id))), kPartR * kPPM, water);
+        drawMetaballs();
     }
 
     // Zeit als 7-Segment (statt Label, da nur DrawNode erlaubt)
@@ -429,4 +427,66 @@ void BoxScene::drawMenu()
         if (i == _menuLevel) _draw->drawDot(Vec2(x, 85), 5.f, kBlue);
         else _draw->drawCircle(Vec2(x, 85), 5.f, kBlack, 1.f);
     }
+}
+
+// Metaballs nur mit DrawNode: Skalarfeld aus Partikel-Kernen auf einem Raster, Iso-Kontur per Marching Squares,
+// Innenflaeche als Dreiecksfaecher, Kontur als Linien.
+void BoxScene::drawMetaballs()
+{
+    constexpr float cell = 6.f;                 // Rasterweite in Pixeln
+    constexpr float R    = 22.f;                // Kernradius
+    constexpr float T    = 0.6f;                // Iso-Wert
+    constexpr int N      = (int)(kWin / cell) + 2;
+    static std::vector<float> f;
+    f.assign(N * N, 0.f);
+
+    for (b2BodyId id : _parts)
+    {
+        Vec2 p = px(toV(b2Body_GetPosition(id)));
+        int x0 = std::max(0, (int)std::floor((p.x - R) / cell)), x1 = std::min(N - 1, (int)std::ceil((p.x + R) / cell));
+        int y0 = std::max(0, (int)std::floor((p.y - R) / cell)), y1 = std::min(N - 1, (int)std::ceil((p.y + R) / cell));
+        for (int y = y0; y <= y1; ++y)
+            for (int x = x0; x <= x1; ++x)
+            {
+                float dx = x * cell - p.x, dy = y * cell - p.y;
+                float q  = 1.f - (dx * dx + dy * dy) / (R * R);
+                if (q > 0.f) f[y * N + x] += q * q;
+            }
+    }
+
+    const Color fill(0.15f, 0.4f, 1.f, 1.f), edge(0.05f, 0.2f, 0.7f, 1.f);
+    for (int y = 0; y < N - 1; ++y)
+        for (int x = 0; x < N - 1; ++x)
+        {
+            // Ecken gegen den Uhrzeigersinn: unten-links, unten-rechts, oben-rechts, oben-links
+            const int cx[4] = {x, x + 1, x + 1, x}, cy[4] = {y, y, y + 1, y + 1};
+            float v[4]; Vec2 c[4];
+            int inside = 0;
+            for (int i = 0; i < 4; ++i)
+            {
+                v[i] = f[cy[i] * N + cx[i]];
+                c[i] = Vec2(cx[i] * cell, cy[i] * cell);
+                inside += v[i] >= T;
+            }
+            if (inside == 0) continue;
+
+            Vec2 poly[8]; int n = 0;
+            Vec2 cross[4]; int nc = 0;
+            for (int i = 0; i < 4; ++i)
+            {
+                int j = (i + 1) & 3;
+                if (v[i] >= T) poly[n++] = c[i];
+                if ((v[i] >= T) != (v[j] >= T))
+                {
+                    float t = (T - v[i]) / (v[j] - v[i]);
+                    Vec2 pt = c[i] + (c[j] - c[i]) * t;
+                    poly[n++] = pt;
+                    cross[nc++] = pt;
+                }
+            }
+            for (int i = 1; i + 1 < n; ++i)
+                _draw->drawSolidTriangle(poly[0], poly[i], poly[i + 1], fill, fill, 0.5f);
+            for (int i = 0; i + 1 < nc; i += 2)
+                _draw->drawLine(cross[i], cross[i + 1], edge, 1.5f, DrawNode::EndStyle::Butt, DrawNode::EndStyle::Butt);
+        }
 }

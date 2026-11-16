@@ -19,6 +19,7 @@ private:
     void drawMenu();
     void startGame();
     void stepFluid();
+    void drawMetaballs();
     int countParticlesInGoal() const;
     void drawDigit(int digit, ax::Vec2 pos, float size);
     void drawTime(long ms, ax::Vec2 pos);
