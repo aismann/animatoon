@@ -9,6 +9,8 @@ Einbinden in ein Axmol-Projekt (`axmol init -p com.example.box -n BoX`):
    Fenster 640x640, dann `director->runWithScene(BoxScene::create());`
 3. Box2D 3.x muss aktiv sein (in Axmol 3.0 gebuendelt, Header `box2d/box2d.h`).
 
+Levels 1-4 (Daten aus dem Original; Level 3 und 4 sind laut Vorlage identisch: Rahmen + Ziel in der Mitte, Ziel-Radius 16). Nach dem Treffer folgt nach 1,5 s das naechste Level, die Zeit startet pro Level neu; oben rechts Level-Ziffer und Fortschrittspunkte.
+
 Steuerung: Pfeil links/rechts dreht den Kasten (Winkelgeschwindigkeit summiert sich wie im Original), Esc beendet.
 Ziel: Ball in den kleinen Kreis unten rechts bringen; Zeit (ms) friert dann ein und wird blau.
 

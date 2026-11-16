@@ -13,7 +13,8 @@ public:
     ~BoxScene() override;
 
 private:
-    void buildWorld();
+    void buildWorld(int level);
+    void startLevel(int level);
     void draw();
     void drawDigit(int digit, ax::Vec2 pos, float size);
     void drawTime(long ms, ax::Vec2 pos);
@@ -25,6 +26,10 @@ private:
     b2BodyId _boxBody   = b2_nullBodyId;  // rotierender Container (kinematisch)
     b2BodyId _ball      = b2_nullBodyId;
     b2Vec2 _goalLocal{};
+    float _goalR = 0.1f;      // Meter
+    int _level = 1;           // 1..4
+    float _winTimer = 0.f;    // Pause nach dem Treffer, dann naechstes Level
+    bool _finished = false;   // alle Levels geschafft
     std::vector<Seg> _segs;
 
     bool _left = false, _right = false, _won = false;

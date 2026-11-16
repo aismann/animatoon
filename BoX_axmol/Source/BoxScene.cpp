@@ -7,7 +7,7 @@ constexpr float kWin     = 640.f;
 constexpr float kPPM     = 100.f;                // Pixel pro Meter (Box2D rechnet in Metern)
 constexpr float kStep    = 1.f / 60.f / 3.f;     // 3 Substeps pro Frame wie im Original
 constexpr float kBallR   = 20.f / kPPM;
-constexpr float kGoalR   = 10.f / kPPM;
+constexpr int   kLevels  = 4;
 constexpr float kWinDist = 23.f / kPPM;
 const Color kBlack(0, 0, 0, 1), kBlue(0, 0, 1, 1), kRed(1, 0, 0, 1);
 
@@ -44,7 +44,7 @@ bool BoxScene::init()
     _draw = DrawNode::create();
     addChild(_draw);
 
-    buildWorld();
+    startLevel(1);
 
     auto kb = KeyboardEventListener::create();
     kb->onKeyPressed = [this](KeyboardEvent* e) {
@@ -66,7 +66,15 @@ bool BoxScene::init()
     return true;
 }
 
-void BoxScene::buildWorld()
+void BoxScene::startLevel(int level)
+{
+    if (B2_IS_NON_NULL(_world)) b2DestroyWorld(_world);
+    _segs.clear();
+    _level = level; _won = false; _w = 0.f; _winTimer = 0.f; _elapsed = 0.0;
+    buildWorld(level);
+}
+
+void BoxScene::buildWorld(int level)
 {
     b2WorldDef wd = b2DefaultWorldDef();
     wd.gravity    = {0.f, -2600.f / kPPM};
@@ -93,18 +101,37 @@ void BoxScene::buildWorld()
     b2Vec2 A = V(-200, -200), B = V(-200, 200), C = V(200, 200), D = V(200, -200);
     seg(A, B); seg(B, C); seg(C, D); seg(D, A);
 
-    // Innere Waende (Labyrinth)
-    for (int n = 0; n <= 3; ++n)
-    {
-        seg(V(-200, -100 + n * 100), V(100, -100 + n * 100));
-        seg(V(-100, -150 + n * 100), V(200, -150 + n * 100));
-    }
+    // Level-Daten (Pixel, y nach unten wie im Original): Ziel + innere Waende
+    float goalX = 0, goalY = 0, goalR = 16;
+    auto line = [&](float x1, float y1, float x2, float y2) { seg(V(x1, y1), V(x2, y2)); };
 
-    // Ziel: kleiner Kreis, nur Sensor
-    _goalLocal         = V(175, 175);
+    if (level == 1)
+    {
+        goalX = 175; goalY = 175;
+        for (int n = 0; n <= 3; ++n)
+        {
+            line(-200, -100 + n * 100, 100, -100 + n * 100);
+            line(-100, -150 + n * 100, 200, -150 + n * 100);
+        }
+    }
+    else if (level == 2)
+    {
+        line(-150, -150, 200, -150);
+        line(-150, -150, -150, 150);
+        line(150, 150, -150, 150);
+        line(150, 150, 150, -100);
+        line(150, -100, -100, -100);
+        line(-100, -100, -100, 100);
+        line(-100, 100, 50, 100);
+    }
+    // Level 3 und 4: nur Rahmen + Ziel in der Mitte
+
+    // Ziel: Sensor-Kreis
+    _goalLocal         = V(goalX, goalY);
+    _goalR             = goalR / kPPM;
     b2ShapeDef gd      = b2DefaultShapeDef();
     gd.isSensor        = true;
-    b2Circle goal{_goalLocal, kGoalR};
+    b2Circle goal{_goalLocal, _goalR};
     b2CreateCircleShape(_boxBody, &gd, &goal);
 
     // Ball (Original: Startposition 500/150 im Fenster, y nach unten)
@@ -120,7 +147,17 @@ void BoxScene::buildWorld()
 
 void BoxScene::update(float dt)
 {
-    if (_won) { draw(); return; }
+    if (_won)
+    {
+        _winTimer += dt;
+        if (_winTimer > 1.5f && !_finished)
+        {
+            if (_level < kLevels) startLevel(_level + 1);
+            else _finished = true;
+        }
+        draw();
+        return;
+    }
 
     _elapsed += dt;
     if (_left)  _w += 0.2f;
@@ -149,7 +186,7 @@ void BoxScene::draw()
         _draw->drawLine(px(a), px(b), kBlack, 1.f);
     }
     // Ziel
-    _draw->drawCircle(px(toV(b2Body_GetWorldPoint(_boxBody, _goalLocal))), kGoalR * kPPM, kBlack, 1.f);
+    _draw->drawCircle(px(toV(b2Body_GetWorldPoint(_boxBody, _goalLocal))), _goalR * kPPM, kBlack, 1.f);
 
     // Ball mit Winkelstrich
     Vec2 p  = px(toV(b2Body_GetPosition(_ball)));
@@ -176,6 +213,15 @@ void BoxScene::draw()
 
     // Zeit als 7-Segment (statt Label, da nur DrawNode erlaubt)
     drawTime((long)(_elapsed * 1000.0), Vec2(10, kWin - 40));
+
+    // Level-Anzeige: Ziffer + Punkte fuer alle Levels (gefuellt = erreicht)
+    drawDigit(_level, Vec2(kWin - 30, kWin - 40), 8.f);
+    for (int i = 1; i <= kLevels; ++i)
+    {
+        Vec2 d(kWin - 100 + i * 14, kWin - 50);
+        if (i <= _level) _draw->drawDot(d, 4.f, _finished ? kBlue : kBlack);
+        else _draw->drawCircle(d, 4.f, kBlack, 1.f);
+    }
 }
 
 void BoxScene::drawDigit(int d, Vec2 o, float s)
