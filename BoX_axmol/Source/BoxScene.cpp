@@ -3,15 +3,19 @@ USING_NS_AX;
 
 namespace
 {
-constexpr float kWin       = 640.f;
-constexpr float kStep      = 1.f / 60.f / 3.f;   // 3 Substeps pro Frame wie im Original
-constexpr float kBallR     = 20.f;
-constexpr float kGoalR     = 10.f;
-constexpr float kWinDist   = 23.f;
+constexpr float kWin     = 640.f;
+constexpr float kPPM     = 100.f;                // Pixel pro Meter (Box2D rechnet in Metern)
+constexpr float kStep    = 1.f / 60.f / 3.f;     // 3 Substeps pro Frame wie im Original
+constexpr float kBallR   = 20.f / kPPM;
+constexpr float kGoalR   = 10.f / kPPM;
+constexpr float kWinDist = 23.f / kPPM;
 const Color kBlack(0, 0, 0, 1), kBlue(0, 0, 1, 1), kRed(1, 0, 0, 1);
 
-// PureBasic hat y nach unten, Axmol nach oben -> y spiegeln (lokale Container-Koordinaten).
-cpVect V(float x, float y) { return cpv(x, -y); }
+// PureBasic hat y nach unten, Axmol/Box2D nach oben -> y spiegeln. Eingabe in Pixeln, Ausgabe in Metern.
+b2Vec2 V(float x, float y) { return {x / kPPM, -y / kPPM}; }
+// b2Pos ist je nach Box2D-Build float oder double
+template <class P> b2Vec2 toV(P p) { return {(float)p.x, (float)p.y}; }
+Vec2 px(b2Vec2 v) { return Vec2(v.x * kPPM, v.y * kPPM); }
 
 // 7-Segment: a(oben) b(o.r.) c(u.r.) d(unten) e(u.l.) f(o.l.) g(mitte)
 const unsigned char kSeg[10] = {0b0111111, 0b0000110, 0b1011011, 0b1001111, 0b1100110,
@@ -28,14 +32,7 @@ BoxScene* BoxScene::create()
 
 BoxScene::~BoxScene()
 {
-    if (!_space) return;
-    std::vector<cpShape*> shapes;
-    std::vector<cpBody*> bodies;
-    cpSpaceEachShape(_space, [](cpShape* s, void* v) { ((std::vector<cpShape*>*)v)->push_back(s); }, &shapes);
-    cpSpaceEachBody(_space, [](cpBody* b, void* v) { ((std::vector<cpBody*>*)v)->push_back(b); }, &bodies);
-    for (auto* s : shapes) { cpSpaceRemoveShape(_space, s); cpShapeFree(s); }
-    for (auto* b : bodies) { cpSpaceRemoveBody(_space, b); cpBodyFree(b); }
-    cpSpaceFree(_space);
+    if (B2_IS_NON_NULL(_world)) b2DestroyWorld(_world);
 }
 
 bool BoxScene::init()
@@ -67,24 +64,29 @@ bool BoxScene::init()
 
 void BoxScene::buildWorld()
 {
-    _space = cpSpaceNew();
-    cpSpaceSetGravity(_space, cpv(0, -2600));
-    cpSpaceSetIterations(_space, 50);
+    b2WorldDef wd = b2DefaultWorldDef();
+    wd.gravity    = {0.f, -2600.f / kPPM};
+    _world        = b2CreateWorld(&wd);
 
     // Container: kinematischer Body, dreht sich um die Fenstermitte
-    _boxBody = cpBodyNewKinematic();
-    cpBodySetPosition(_boxBody, cpv(320, 320));
-    cpSpaceAddBody(_space, _boxBody);
+    b2BodyDef bd = b2DefaultBodyDef();
+    bd.type      = b2_kinematicBody;
+    bd.position  = {320.f / kPPM, 320.f / kPPM};
+    _boxBody     = b2CreateBody(_world, &bd);
 
-    auto seg = [&](cpVect a, cpVect b) {
-        cpShape* s = cpSegmentShapeNew(_boxBody, a, b, 0.f);
-        cpShapeSetElasticity(s, 1.f);
-        cpShapeSetFriction(s, 1.f);
-        cpSpaceAddShape(_space, s);
+    // Box2D mischt Restitution mit max(), Chipmunk multiplizierte (1*0 = 0) -> hier 0 fuer gleiches Verhalten.
+    b2ShapeDef sd             = b2DefaultShapeDef();
+    sd.material.friction      = 1.f;
+    sd.material.restitution   = 0.f;
+
+    auto seg = [&](b2Vec2 a, b2Vec2 b) {
+        b2Segment s{a, b};
+        b2CreateSegmentShape(_boxBody, &sd, &s);
+        _segs.push_back({a, b});
     };
 
     // Aussenrahmen
-    cpVect A = V(-200, -200), B = V(-200, 200), C = V(200, 200), D = V(200, -200);
+    b2Vec2 A = V(-200, -200), B = V(-200, 200), C = V(200, 200), D = V(200, -200);
     seg(A, B); seg(B, C); seg(C, D); seg(D, A);
 
     // Innere Waende (Labyrinth)
@@ -94,21 +96,22 @@ void BoxScene::buildWorld()
         seg(V(-100, -150 + n * 100), V(200, -150 + n * 100));
     }
 
-    // Ziel: kleiner Kreis, nur Sensor (im Original reine Zielmarke)
-    _goalLocal = V(175, 175);
-    _goal      = cpCircleShapeNew(_boxBody, kGoalR, _goalLocal);
-    cpShapeSetSensor(_goal, cpTrue);
-    cpSpaceAddShape(_space, _goal);
+    // Ziel: kleiner Kreis, nur Sensor
+    _goalLocal         = V(175, 175);
+    b2ShapeDef gd      = b2DefaultShapeDef();
+    gd.isSensor        = true;
+    b2Circle goal{_goalLocal, kGoalR};
+    b2CreateCircleShape(_boxBody, &gd, &goal);
 
     // Ball (Original: Startposition 500/150 im Fenster, y nach unten)
-    cpFloat mass = 1.0;
-    _ball        = cpBodyNew(mass, cpMomentForCircle(mass, 0, kBallR, cpvzero));
-    cpBodySetPosition(_ball, cpv(500, kWin - 150));
-    cpSpaceAddBody(_space, _ball);
-    cpShape* bs = cpCircleShapeNew(_ball, kBallR, cpvzero);
-    cpShapeSetElasticity(bs, 0.f);
-    cpShapeSetFriction(bs, 1.f);
-    cpSpaceAddShape(_space, bs);
+    b2BodyDef ballDef = b2DefaultBodyDef();
+    ballDef.type      = b2_dynamicBody;
+    ballDef.position  = {500.f / kPPM, (kWin - 150.f) / kPPM};
+    _ball             = b2CreateBody(_world, &ballDef);
+    b2ShapeDef bs     = sd;
+    bs.density        = 1.f;
+    b2Circle circle{{0.f, 0.f}, kBallR};
+    b2CreateCircleShape(_ball, &bs, &circle);
 }
 
 void BoxScene::update(float dt)
@@ -118,12 +121,12 @@ void BoxScene::update(float dt)
     _elapsed += dt;
     if (_left)  _w += 0.2f;
     if (_right) _w -= 0.2f;   // y-Achse gespiegelt: rechts = im Uhrzeigersinn = negativ
-    cpBodySetAngularVelocity(_boxBody, _w);
+    b2Body_SetAngularVelocity(_boxBody, _w);
 
-    for (int i = 0; i < 3; ++i) cpSpaceStep(_space, kStep);
+    for (int i = 0; i < 3; ++i) b2World_Step(_world, kStep, 4);
 
-    cpVect g = cpBodyLocalToWorld(_boxBody, _goalLocal);
-    cpVect b = cpBodyGetPosition(_ball);
+    b2Vec2 g = toV(b2Body_GetWorldPoint(_boxBody, _goalLocal));
+    b2Vec2 b = toV(b2Body_GetPosition(_ball));
     if (std::abs(b.x - g.x) < kWinDist && std::abs(b.y - g.y) < kWinDist)
         _won = true;
 
@@ -134,34 +137,38 @@ void BoxScene::draw()
 {
     _draw->clear();
 
-    // Segmente + Ziel
-    cpSpaceEachShape(_space, [](cpShape* s, void* ud) {
-        auto* self = (BoxScene*)ud;
-        cpBody* body = cpShapeGetBody(s);
-        if (body != self->_boxBody) return;
-        if (s == self->_goal) {
-            cpVect p = cpBodyLocalToWorld(body, self->_goalLocal);
-            self->_draw->drawCircle(Vec2(p.x, p.y), kGoalR, kBlack, 1.f);
-        } else {
-            cpVect a = cpBodyLocalToWorld(body, cpSegmentShapeGetA(s));
-            cpVect b = cpBodyLocalToWorld(body, cpSegmentShapeGetB(s));
-            self->_draw->drawLine(Vec2(a.x, a.y), Vec2(b.x, b.y), kBlack, 1.f);
-        }
-    }, this);
+    // Segmente
+    for (const Seg& s : _segs)
+    {
+        b2Vec2 a = toV(b2Body_GetWorldPoint(_boxBody, s.a));
+        b2Vec2 b = toV(b2Body_GetWorldPoint(_boxBody, s.b));
+        _draw->drawLine(px(a), px(b), kBlack, 1.f);
+    }
+    // Ziel
+    _draw->drawCircle(px(toV(b2Body_GetWorldPoint(_boxBody, _goalLocal))), kGoalR * kPPM, kBlack, 1.f);
 
     // Ball mit Winkelstrich
-    cpVect p = cpBodyGetPosition(_ball);
-    float a  = (float)cpBodyGetAngle(_ball);
-    _draw->drawCircle(Vec2(p.x, p.y), kBallR, kBlack, 1.f);
-    _draw->drawLine(Vec2(p.x, p.y), Vec2(p.x + cosf(a) * kBallR, p.y + sinf(a) * kBallR), kBlack, 1.f);
+    Vec2 p  = px(toV(b2Body_GetPosition(_ball)));
+    float a = b2Rot_GetAngle(b2Body_GetRotation(_ball));
+    _draw->drawCircle(p, kBallR * kPPM, kBlack, 1.f);
+    _draw->drawLine(p, Vec2(p.x + cosf(a) * kBallR * kPPM, p.y + sinf(a) * kBallR * kPPM), kBlack, 1.f);
 
-    // Kontaktpunkte (rot)
-    cpBodyEachArbiter(_ball, [](cpBody*, cpArbiter* arb, void* ud) {
-        auto* self = (BoxScene*)ud;
-        cpContactPointSet set = cpArbiterGetContactPointSet(arb);
-        for (int i = 0; i < set.count; ++i)
-            self->_draw->drawDot(Vec2(set.points[i].pointA.x, set.points[i].pointA.y), 2.f, kRed);
-    }, this);
+    // Kontaktpunkte (rot). anchorA ist relativ zum Body von Shape A.
+    int cap = b2Body_GetContactCapacity(_ball);
+    if (cap > 0)
+    {
+        std::vector<b2ContactData> cd(cap);
+        int n = b2Body_GetContactData(_ball, cd.data(), cap);
+        for (int i = 0; i < n; ++i)
+        {
+            b2Vec2 origin = toV(b2Body_GetPosition(b2Shape_GetBody(cd[i].shapeIdA)));
+            for (int k = 0; k < cd[i].manifold.pointCount; ++k)
+            {
+                b2Vec2 w = b2Add(origin, cd[i].manifold.points[k].anchorA);
+                _draw->drawDot(px(w), 2.f, kRed);
+            }
+        }
+    }
 
     // Zeit als 7-Segment (statt Label, da nur DrawNode erlaubt)
     drawTime((long)(_elapsed * 1000.0), Vec2(10, kWin - 40));
