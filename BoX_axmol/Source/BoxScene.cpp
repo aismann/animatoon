@@ -1,5 +1,5 @@
 #include "BoxScene.h"
-USING_NS_AX;
+using namespace ax;
 
 namespace
 {
@@ -46,15 +46,19 @@ bool BoxScene::init()
 
     buildWorld();
 
-    auto kb = EventListenerKeyboard::create();
-    kb->onKeyPressed = [this](EventKeyboard::KeyCode k, Event*) {
-        if (k == EventKeyboard::KeyCode::KEY_LEFT_ARROW) _left = true;
-        if (k == EventKeyboard::KeyCode::KEY_RIGHT_ARROW) _right = true;
-        if (k == EventKeyboard::KeyCode::KEY_ESCAPE) Director::getInstance()->end();
+    auto kb = KeyboardEventListener::create();
+    kb->onKeyPressed = [this](KeyboardEvent* e) {
+        switch (e->getKeyCode())
+        {
+        case KeyboardEvent::KeyCode::KEY_LEFT_ARROW:  _left = true; break;
+        case KeyboardEvent::KeyCode::KEY_RIGHT_ARROW: _right = true; break;
+        case KeyboardEvent::KeyCode::KEY_ESCAPE:      Director::getInstance()->end(); break;
+        default: break;
+        }
     };
-    kb->onKeyReleased = [this](EventKeyboard::KeyCode k, Event*) {
-        if (k == EventKeyboard::KeyCode::KEY_LEFT_ARROW) _left = false;
-        if (k == EventKeyboard::KeyCode::KEY_RIGHT_ARROW) _right = false;
+    kb->onKeyReleased = [this](KeyboardEvent* e) {
+        if (e->getKeyCode() == KeyboardEvent::KeyCode::KEY_LEFT_ARROW) _left = false;
+        if (e->getKeyCode() == KeyboardEvent::KeyCode::KEY_RIGHT_ARROW) _right = false;
     };
     _eventDispatcher->addEventListenerWithSceneGraphPriority(kb, this);
 
