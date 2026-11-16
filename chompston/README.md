@@ -1,6 +1,7 @@
 # Chompston – Axmol 3.0 Port (nur DrawNode)
 
-Port des PureBasic-Spiels *Chompston* nach **Axmol 3.0** (C++20).
+Port des PureBasic-Spiels *Chompston* nach **Axmol 3.0** (C++20), geprüft gegen den aktuellen `dev`-Stand der Engine
+(neue API: `PointerEventListener`, `KeyboardEvent`, `applicationWillLaunch`, `RenderView`). Bitte immer die neueste Axmol-Version verwenden.
 
 * **Kein Sprite, keine Textur, kein Label** – alles (3D-Labyrinth, Würfel, Schatten, Explosionen,
   HUD, Pixel-Schrift, Titel-Logo) wird mit `ax::DrawNode` gezeichnet (`drawSolidPoly` / `drawSolidRect` / `drawSolidCircle`).
@@ -29,6 +30,7 @@ cmake -S . -B build && cmake --build build
 | ←/→ oder A/D | links/rechts abbiegen (an der nächsten Kreuzung, im Stand sofort) |
 | ↓ oder S | umdrehen |
 | Leertaste / ↑ / Strg | Bombe (Radius ~3 Felder) |
+| C | Kamera: Draufsicht (Standard, Gänge sind die erhöhten Flächen, Bild dreht mit dem Spieler) / Verfolgerkamera |
 | P / Esc | Pause |
 | Enter | Start / nach Game Over zurück zum Titel |
 | M / V / F / G | Musik an/aus · Lautstärke 0–5 · Fenster/Vollbild · Glättung |

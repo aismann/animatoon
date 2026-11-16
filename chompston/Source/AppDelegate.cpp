@@ -14,7 +14,7 @@ AppDelegate::AppDelegate() {}
 
 AppDelegate::~AppDelegate() {}
 
-void AppDelegate::initContextAttrs()
+void AppDelegate::applicationWillLaunch()
 {
     // settings.ini / chomp.cfg are read before the window exists (Vsync, Windowwidth, Windowed)
     Settings::get().load();
@@ -37,11 +37,11 @@ bool AppDelegate::applicationDidFinishLaunching()
 #if (AX_TARGET_PLATFORM == AX_PLATFORM_WIN32) || (AX_TARGET_PLATFORM == AX_PLATFORM_MAC) || \
     (AX_TARGET_PLATFORM == AX_PLATFORM_LINUX)
         if (st.windowed)
-            renderView = RenderViewImpl::createWithRect("Chompston", ax::Rect(0, 0, (float)st.windowWidth, (float)st.windowWidth));
+            renderView = RenderView::createWithRect("Chompston", ax::Rect(0, 0, (float)st.windowWidth, (float)st.windowWidth));
         else
-            renderView = RenderViewImpl::createWithFullscreen("Chompston");
+            renderView = RenderView::createWithFullscreen("Chompston");
 #else
-        renderView = RenderViewImpl::create("Chompston");
+        renderView = RenderView::create("Chompston");
 #endif
         director->setRenderView(renderView);
     }
@@ -59,13 +59,13 @@ bool AppDelegate::applicationDidFinishLaunching()
 
 void AppDelegate::applicationDidEnterBackground()
 {
-    Director::getInstance()->stopAnimation();
+    Director::getInstance()->deactivate();
     AudioEngine::pauseAll();
 }
 
 void AppDelegate::applicationWillEnterForeground()
 {
-    Director::getInstance()->startAnimation();
+    Director::getInstance()->activate();
     AudioEngine::resumeAll();
 }
 

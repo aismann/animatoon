@@ -14,6 +14,7 @@ namespace
 {
 constexpr float kW = 512.f, kH = 512.f;
 constexpr float kPi = 3.14159265f;
+constexpr float kPathH = 0.5f;   // height of the raised corridors in top view
 constexpr float kWallH = 0.28f;  // half height of a wall slab (the cube is taller than the walls)
 
 const Color kYellow(1.0f, 0.86f, 0.05f);
@@ -74,12 +75,12 @@ bool GameScene::init()
     addChild(_overlay, 2);
 
     auto kb        = EventListenerKeyboard::create();
-    kb->onKeyPressed = AX_CALLBACK_2(GameScene::onKeyPressed, this);
+    kb->onKeyPressed = AX_CALLBACK_1(GameScene::onKeyPressed, this);
     _eventDispatcher->addEventListenerWithSceneGraphPriority(kb, this);
 
-    auto touch            = EventListenerTouchAllAtOnce::create();
-    touch->onTouchesBegan = AX_CALLBACK_2(GameScene::onTouchesBegan, this);
-    _eventDispatcher->addEventListenerWithSceneGraphPriority(touch, this);
+    auto pointer           = PointerEventListener::create();  // mouse + touch
+    pointer->onPointerDown = AX_CALLBACK_1(GameScene::onPointerDown, this);
+    _eventDispatcher->addEventListenerWithSceneGraphPriority(pointer, this);
 
     _gfx.smooth = Settings::get().smoothing != 0;
     Sound::init();
@@ -103,7 +104,7 @@ void GameScene::toggleFullscreen()
     (AX_TARGET_PLATFORM == AX_PLATFORM_LINUX)
     auto& st = Settings::get();
     st.windowed = !st.windowed;
-    if (auto view = dynamic_cast<RenderViewImpl*>(_director->getRenderView()))
+    if (auto view = dynamic_cast<RenderView*>(_director->getRenderView()))
     {
         if (st.windowed)
             view->setWindowed(st.windowWidth, st.windowWidth);
@@ -124,9 +125,10 @@ void GameScene::confirm()
     }
 }
 
-void GameScene::onKeyPressed(EventKeyboard::KeyCode code, Event*)
+void GameScene::onKeyPressed(KeyboardEvent* ev)
 {
-    using K = EventKeyboard::KeyCode;
+    using K = KeyboardEvent::KeyCode;
+    const auto code = ev->getKeyCode();
     auto& st = Settings::get();
     switch (code)
     {
@@ -160,6 +162,7 @@ void GameScene::onKeyPressed(EventKeyboard::KeyCode code, Event*)
         st.audioVolume = (st.audioVolume + 1) % (Settings::kMaxVolume + 1);
         applyAndSave();
         break;
+    case K::KEY_C: _topView = !_topView; break;
     case K::KEY_G:
         st.smoothing = !st.smoothing;
         applyAndSave();
@@ -169,20 +172,18 @@ void GameScene::onKeyPressed(EventKeyboard::KeyCode code, Event*)
     }
 }
 
-void GameScene::onTouchesBegan(const std::vector<Touch*>& touches, Event*)
+bool GameScene::onPointerDown(PointerEvent* ev)
 {
-    if (touches.empty())
-        return;
-    auto p = _director->convertToGL(touches[0]->getLocationInView());
+    Vec2 p = ev->getWorldPoint();
     if (_game.state == State::Title || _game.state == State::GameOver)
     {
         confirm();
-        return;
+        return true;
     }
     if (_game.state == State::Paused)
     {
         _game.togglePause();
-        return;
+        return true;
     }
     if (p.y < 90.f && p.x > 180.f && p.x < 332.f)
         _game.dropBomb();
@@ -190,6 +191,7 @@ void GameScene::onTouchesBegan(const std::vector<Touch*>& touches, Event*)
         _game.turnLeft();
     else
         _game.turnRight();
+    return true;
 }
 
 // ------------------------------------------------------------------ main loop
@@ -242,6 +244,18 @@ void GameScene::updateCamera(float dt)
         return;
     }
 
+    if (_topView)
+    {
+        // straight down, rotating with the player so that "up" on screen is the driving direction
+        _gfx.pitch    = kPi * 0.5f;
+        _gfx.fogStart = 100.f;
+        _gfx.fogEnd   = 200.f;
+        _gfx.center   = Vec2(256.f, 256.f);
+        _gfx.yaw      = _yawVis;
+        float sy = std::sin(_yawVis), cy = std::cos(_yawVis);
+        _gfx.pos = V3(_game.px + sy * 1.6f, 8.5f, _game.pz + cy * 1.6f);
+        return;
+    }
     _gfx.pitch    = 0.26f;
     _gfx.fogStart = 4.f;
     _gfx.fogEnd   = 13.f;
@@ -256,6 +270,7 @@ void GameScene::updateCamera(float dt)
 
 void GameScene::renderWorld()
 {
+    _baseY = _topView ? kPathH : 0.f;
     _world->clear();
     _gfx.begin(_world);
     drawSky();
@@ -269,6 +284,11 @@ void GameScene::renderWorld()
 
 void GameScene::drawSky()
 {
+    if (_topView && _game.state != State::Title)
+    {
+        _world->drawSolidRect(Vec2(0, 0), Vec2(kW, kH), Color(0.05f, 0.04f, 0.10f));
+        return;
+    }
     // horizon line on screen: direction (0,0,inf) projects to centre.y + focal * tan(pitch)
     float horizon = _gfx.center.y + _gfx.focal * std::tan(_gfx.pitch);
     horizon       = std::clamp(horizon, 0.f, kH);
@@ -290,20 +310,22 @@ void GameScene::drawFloor()
     const bool title = _game.state == State::Title;
     const float maxD = title ? 40.f : 13.f;
     const Color a(0.17f, 0.18f, 0.25f), b(0.14f, 0.15f, 0.21f);
+    const Color pitA(0.07f, 0.06f, 0.14f), pitB(0.05f, 0.045f, 0.11f);  // low ground between the corridors
     for (int r = 0; r < kGrid; ++r)
         for (int c = 0; c < kGrid; ++c)
         {
-            if (_game.wall[r][c])
+            // top view: the low ground is where the walls are; chase view: the floor is the corridor
+            if (_topView ? !_game.wall[r][c] : (bool)_game.wall[r][c])
                 continue;
             V3 centre((float)c, 0.f, (float)r);
             V3 cc = _gfx.toCam(centre);
             if (cc.z < -1.2f || cc.z > maxD)
                 continue;
-            if (!title && std::fabs(cc.x) > cc.z * 0.9f + 2.2f)
+            if (!title && !_topView && std::fabs(cc.x) > cc.z * 0.9f + 2.2f)
                 continue;
             const float h = 0.5f;
             _gfx.quad(V3(c - h, 0, r - h), V3(c + h, 0, r - h), V3(c + h, 0, r + h), V3(c - h, 0, r + h),
-                      ((r + c) & 1) ? a : b);
+                      _topView ? (((r + c) & 1) ? pitA : pitB) : (((r + c) & 1) ? a : b));
         }
 }
 
@@ -314,6 +336,11 @@ void GameScene::drawEntities()
     const float maxD = title ? 40.f : 13.f;
 
     auto visible = [&](float x, float z, float margin) {
+        if (_topView)
+        {
+            float dx = x - _gfx.pos.x, dz = z - _gfx.pos.z;
+            return dx * dx + dz * dz < 9.5f * 9.5f;
+        }
         V3 cc = _gfx.toCam(V3(x, 0.4f, z));
         if (cc.z < -1.0f - margin || cc.z > maxD)
             return false;
@@ -324,8 +351,33 @@ void GameScene::drawEntities()
         return dx * dx + dz * dz;
     };
 
-    // walls
-    for (int r = 0; r < kGrid; ++r)
+    if (_topView)
+    {
+        // corridors are the raised part: one slab per open tile, inner faces skipped
+        for (int r = 0; r < kGrid; ++r)
+            for (int c = 0; c < kGrid; ++c)
+            {
+                if (_game.wall[r][c] || !visible((float)c, (float)r, 0.8f))
+                    continue;
+                int skip = 0;
+                auto o   = [&](int cc, int rr) { return _game.open(cc, rr); };
+                if (o(c + 1, r)) skip |= 1;
+                if (o(c - 1, r)) skip |= 2;
+                if (o(c, r + 1)) skip |= 4;
+                if (o(c, r - 1)) skip |= 8;
+                _drawList.emplace_back(distKey((float)c, (float)r) + 0.3f, [this, c, r, skip] {
+                    Gfx3D::BoxStyle st;
+                    st.color       = Color(0.33f, 0.28f, 0.74f);
+                    st.top         = ((r + c) & 1) ? Color(0.30f, 0.32f, 0.44f) : Color(0.26f, 0.28f, 0.39f);
+                    st.useTopColor = true;
+                    st.ambient     = 0.45f;
+                    _gfx.box(V3((float)c, kPathH * 0.5f, (float)r), V3(0.5f, kPathH * 0.5f, 0.5f), 0.f, st, skip);
+                });
+            }
+    }
+
+    // walls (chase view only)
+    for (int r = 0; r < kGrid && !_topView; ++r)
         for (int c = 0; c < kGrid; ++c)
         {
             if (!_game.wall[r][c] || !visible((float)c, (float)r, 0.8f))
@@ -366,35 +418,36 @@ void GameScene::drawEntities()
 void GameScene::drawPickup(const Pickup& p)
 {
     float x = (float)p.c, z = (float)p.r;
+    const float B = _baseY;
     float spin = _time * 2.f + p.c * 0.7f;
     Gfx3D::BoxStyle st;
     switch (p.kind)
     {
     case Pickup::Kind::Pellet:
         st.color = Color(1.f, 0.93f, 0.55f);
-        _gfx.box(V3(x, 0.28f, z), V3(0.07f, 0.07f, 0.07f), spin, st);
+        _gfx.box(V3(x, B + 0.28f, z), V3(0.07f, 0.07f, 0.07f), spin, st);
         break;
     case Pickup::Kind::Power:
     {
         float k  = 0.20f + 0.03f * std::sin(_time * 8.f);
         st.color = Color(1.f, 0.55f, 0.1f);
-        _gfx.disc(x, 0.01f, z, 0.32f, Color(0, 0, 0, 0.35f), 14);
-        _gfx.box(V3(x, 0.38f, z), V3(k, k, k), spin, st);
+        _gfx.disc(x, B + 0.01f, z, 0.32f, Color(0, 0, 0, 0.35f), 14);
+        _gfx.box(V3(x, B + 0.38f, z), V3(k, k, k), spin, st);
         break;
     }
     case Pickup::Kind::Heart:
     {
         float k  = 0.20f + 0.03f * std::sin(_time * 6.f);
         st.color = Color(0.95f, 0.12f, 0.25f);
-        _gfx.disc(x, 0.01f, z, 0.32f, Color(0, 0, 0, 0.35f), 14);
-        _gfx.box(V3(x, 0.40f + 0.05f * std::sin(_time * 4.f), z), V3(k, k, k * 0.6f), spin, st);
+        _gfx.disc(x, B + 0.01f, z, 0.32f, Color(0, 0, 0, 0.35f), 14);
+        _gfx.box(V3(x, B + 0.40f + 0.05f * std::sin(_time * 4.f), z), V3(k, k, k * 0.6f), spin, st);
         break;
     }
     case Pickup::Kind::Bomb:
     {
         st.color = Color(0.18f, 0.18f, 0.22f);
-        _gfx.disc(x, 0.01f, z, 0.32f, Color(0, 0, 0, 0.35f), 14);
-        float by = 0.38f + 0.04f * std::sin(_time * 5.f);
+        _gfx.disc(x, B + 0.01f, z, 0.32f, Color(0, 0, 0, 0.35f), 14);
+        float by = B + 0.38f + 0.04f * std::sin(_time * 5.f);
         _gfx.box(V3(x, by, z), V3(0.2f, 0.2f, 0.2f), spin, st);
         Gfx3D::BoxStyle fuse;
         fuse.color = (std::fmod(_time, 0.3f) < 0.15f) ? Color(1.f, 0.85f, 0.1f) : Color(1.f, 0.35f, 0.05f);
@@ -416,12 +469,12 @@ void GameScene::drawGhost(const Ghost& g)
     float hop = std::fabs(std::sin(g.bob)) * 0.07f;
     float rot = (g.dx || g.dz) ? std::atan2((float)g.dx, (float)g.dz) : 0.f;
     const float h = 0.30f;
-    _gfx.disc(g.x, 0.01f, g.z, 0.42f, Color(0, 0, 0, 0.35f), 14);
+    _gfx.disc(g.x, _baseY + 0.01f, g.z, 0.42f, Color(0, 0, 0, 0.35f), 14);
 
     Gfx3D::BoxStyle st;
     st.color = col;
     st.ambient = 0.6f;
-    V3 c(g.x, h + hop, g.z);
+    V3 c(g.x, _baseY + h + hop, g.z);
     int mask = _gfx.box(c, V3(h, h, h), rot, st);
 
     // eyes on the +z (front) face
@@ -453,8 +506,8 @@ void GameScene::drawPlayer()
     float hop    = _game.pMoving ? std::fabs(std::sin(_game.chompAnim)) * 0.07f : 0.f;
     const float h = 0.36f * k;
 
-    V3 c(_game.px, h + hop + (deathT > 0.f ? deathT * 0.25f : 0.f), _game.pz);
-    _gfx.disc(_game.px, 0.01f, _game.pz, 0.5f * k, Color(0, 0, 0, 0.4f), 16);
+    V3 c(_game.px, _baseY + h + hop + (deathT > 0.f ? deathT * 0.25f : 0.f), _game.pz);
+    _gfx.disc(_game.px, _baseY + 0.01f, _game.pz, 0.5f * k, Color(0, 0, 0, 0.4f), 16);
 
     Gfx3D::BoxStyle st;
     st.color   = kYellow;
@@ -467,8 +520,7 @@ void GameScene::drawPlayer()
     V3 axv(cs, 0, -sn), azv(sn, 0, cs);
     float open = _game.pMoving ? 0.5f + 0.5f * std::sin(_game.chompAnim * 1.4f) : 0.15f;
 
-    auto face = [&](V3 origin, V3 u) {
-        V3 v(0, 2 * h, 0);
+    auto face = [&](V3 origin, V3 u, V3 v) {
         const Color black(0.04f, 0.03f, 0.02f);
         _gfx.decal(origin, u, v, 0.20f, 0.52f, 0.32f, 0.86f, black);  // eyes
         _gfx.decal(origin, u, v, 0.68f, 0.52f, 0.80f, 0.86f, black);
@@ -476,10 +528,12 @@ void GameScene::drawPlayer()
         _gfx.decal(origin, u, v, 0.12f, 0.16f, 0.88f, top, black);     // mouth
         _gfx.decal(origin, u, v, 0.16f, top - 0.07f, 0.84f, top - 0.01f, Color(0.82f, 0.82f, 0.86f));  // teeth
     };
+    if (mask & 16)  // top face (top view): upright face, screen-up is the driving direction
+        face(c + axv * (-h) + azv * (-h) + V3(0, h + 0.003f, 0), axv * (2 * h), azv * (2 * h));
     if (mask & 8)  // back face, seen from behind: screen right == local +x
-        face(c + axv * (-h) + azv * (-h - 0.003f) + V3(0, -h, 0), axv * (2 * h));
+        face(c + axv * (-h) + azv * (-h - 0.003f) + V3(0, -h, 0), axv * (2 * h), V3(0, 2 * h, 0));
     if (mask & 4)  // front face
-        face(c + axv * h + azv * (h + 0.003f) + V3(0, -h, 0), axv * (-2 * h));
+        face(c + axv * h + azv * (h + 0.003f) + V3(0, -h, 0), axv * (-2 * h), V3(0, 2 * h, 0));
 }
 
 void GameScene::drawEffects()
@@ -490,17 +544,17 @@ void GameScene::drawEffects()
         float t = e.t / 0.9f;
         float r = 0.4f + t * 3.3f;
         float a = 1.f - t;
-        _gfx.disc(e.x, 0.04f, e.z, r, Color(1.f, 0.35f, 0.05f, 0.55f * a), 24, false);
-        _gfx.disc(e.x, 0.06f, e.z, r * 0.75f, Color(1.f, 0.65f, 0.1f, 0.65f * a), 24, false);
-        _gfx.disc(e.x, 0.08f, e.z, r * 0.45f, Color(1.f, 0.95f, 0.5f, 0.8f * a), 20, false);
+        _gfx.disc(e.x, _baseY + 0.04f, e.z, r, Color(1.f, 0.35f, 0.05f, 0.55f * a), 24, false);
+        _gfx.disc(e.x, _baseY + 0.06f, e.z, r * 0.75f, Color(1.f, 0.65f, 0.1f, 0.65f * a), 24, false);
+        _gfx.disc(e.x, _baseY + 0.08f, e.z, r * 0.45f, Color(1.f, 0.95f, 0.5f, 0.8f * a), 20, false);
         for (int i = 0; i < 3; ++i)
-            _gfx.disc(e.x, 0.3f + i * 0.35f + t * 0.8f, e.z, r * (0.30f - i * 0.07f), Color(1.f, 0.85f, 0.2f, 0.5f * a),
+            _gfx.disc(e.x, _baseY + 0.3f + i * 0.35f + t * 0.8f, e.z, r * (0.30f - i * 0.07f), Color(1.f, 0.85f, 0.2f, 0.5f * a),
                       14, false);
     }
     // score popups
     for (auto& p : _game.popups)
     {
-        V3 cc = _gfx.toCam(V3(p.x, 0.9f + p.t * 0.8f, p.z));
+        V3 cc = _gfx.toCam(V3(p.x, _baseY + 0.9f + p.t * 0.8f, p.z));
         if (cc.z < 0.3f)
             continue;
         Vec2 s = _gfx.project(cc);
@@ -606,7 +660,7 @@ void GameScene::renderOverlay()
         pixfont::drawShadow(_overlay, "LEFT/RIGHT TURN", Vec2(498, 66), 2.f, Color(0.8f, 1.f, 0.8f), 1.f);
         pixfont::drawShadow(_overlay, "DOWN REVERSE", Vec2(498, 46), 2.f, Color(0.8f, 1.f, 0.8f), 1.f);
         pixfont::drawShadow(_overlay, "SPACE BOMB", Vec2(498, 26), 2.f, Color(0.8f, 1.f, 0.8f), 1.f);
-        pixfont::drawShadow(_overlay, "P PAUSE", Vec2(498, 6), 2.f, Color(0.8f, 1.f, 0.8f), 1.f);
+        pixfont::drawShadow(_overlay, "C CAMERA  P PAUSE", Vec2(498, 6), 2.f, Color(0.8f, 1.f, 0.8f), 1.f);
         break;
     }
     case State::Ready:

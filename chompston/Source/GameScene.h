@@ -15,8 +15,8 @@ public:
 
 private:
     // input
-    void onKeyPressed(ax::EventKeyboard::KeyCode code, ax::Event* event);
-    void onTouchesBegan(const std::vector<ax::Touch*>& touches, ax::Event* event);
+    bool onPointerDown(ax::PointerEvent* ev);
+    void onKeyPressed(ax::KeyboardEvent* ev);
     void confirm();
     void toggleFullscreen();
     void applyAndSave();
@@ -42,6 +42,8 @@ private:
     ax::DrawNode* _overlay = nullptr;
 
     float _yawVis   = 0.f;   // smoothed heading used by camera + player body
+    bool _topView   = true;  // top-down camera, corridors are the raised part
+    float _baseY    = 0.f;   // height of the surface the actors stand on
     float _time     = 0.f;
     float _acc      = 0.f;
     std::string _hudKey;
