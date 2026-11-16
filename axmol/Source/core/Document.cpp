@@ -43,6 +43,7 @@ void Document::create(int w, int h, bool)
     _h = std::clamp(h, 1, 16384);
     layers.clear();
     layerId          = 0;
+    _nextUid         = 1;
     selection.active = false;
     _composite.create(_w, _h, Color(255, 255, 255, 255));
     clearHistory();
@@ -410,6 +411,24 @@ Color Document::pickColor(int x, int y, int mode) const
         compositeOpaque(l.bm, d, l.image.at(x, y), l.alpha, x, y);
     }
     return Color(d[0], d[1], d[2], 255);
+}
+
+Color Document::pickPaint(int x, int y, int mode) const
+{
+    if (x < 0 || y < 0 || x >= _w || y >= _h || layers.empty())
+        return Color(0, 0, 0, 0);
+    int id = std::clamp(layerId, 0, (int)layers.size() - 1);
+    if (mode == 1)
+        return layers[id].image.get(x, y);
+    int last     = mode == 0 ? (int)layers.size() - 1 : id;
+    uint8_t d[4] = {0, 0, 0, 0};
+    for (int i = 0; i <= last; ++i)
+    {
+        const Layer& l = layers[i];
+        if (l.view && l.image.inside(x, y))
+            compositeAlpha(l.bm, d, l.image.at(x, y), l.alpha, x, y);
+    }
+    return Color(d[0], d[1], d[2], d[3]);
 }
 
 // ------------------------------------------------------------------ history

@@ -105,7 +105,10 @@ static bool fromAxImage(ax::Image* img, Image& dst)
     const uint8_t* s = img->getData();
     uint8_t* d       = dst.data();
     size_t n         = (size_t)w * h;
-    bool pma         = img->hasPremultipliedAlpha();
+    // The pictures are loaded with Image::setPNGPremultipliedAlphaEnabled(false) : the pixels are
+    // straight alpha even if the engine flags the image as premultiplied (it expects the shader
+    // to do it), so nothing has to be converted here.
+    const bool pma = false;
     switch (img->getPixelFormat())
     {
     case ax::rhi::PixelFormat::RGBA8:

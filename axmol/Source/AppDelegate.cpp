@@ -26,7 +26,9 @@
 
 using namespace ax;
 
-static ax::Size designResolutionSize = ax::Size(1280, 720);
+#include "core/Util.h"
+
+static ax::Size designResolutionSize = ax::Size(1400, 860);
 
 AppDelegate::AppDelegate() {}
 
@@ -85,7 +87,7 @@ bool AppDelegate::applicationDidFinishLaunching()
 #if (AX_TARGET_PLATFORM == AX_PLATFORM_WIN32) || (AX_TARGET_PLATFORM == AX_PLATFORM_MAC) || \
     (AX_TARGET_PLATFORM == AX_PLATFORM_LINUX)
         renderView = RenderView::createWithRect(
-            "Animatoon", ax::Rect(0, 0, designResolutionSize.width, designResolutionSize.height));
+            "Animatoon", ax::Rect(0, 0, designResolutionSize.width, designResolutionSize.height), 1.0f, true);
 #else
         renderView = RenderView::create("Animatoon");
 #endif
@@ -102,14 +104,18 @@ bool AppDelegate::applicationDidFinishLaunching()
 #endif
 
     // turn on display FPS
-    director->setStatsDisplay(true);
+    director->setStatsDisplay(false);
 
     // set FPS. the default value is 1.0/60 if you don't call this
     director->setAnimationInterval(1.0f / 60);
 
     // Set the design resolution
     renderView->setDesignResolutionSize(designResolutionSize.width, designResolutionSize.height,
-                                        ResolutionPolicy::SHOW_ALL);
+                                        ResolutionPolicy::EXACT_FIT);
+
+    // The "data" folder of Animatoon (papers, brushes, presets, themes, languages) is inside the resources
+    std::string root = FileUtils::getInstance()->getDefaultResourceRootPath();
+    ani::setDataRoot(root);
 
     // create a scene. it's an autorelease object
     auto scene = utils::createInstance<MainScene>();

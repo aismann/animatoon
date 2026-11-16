@@ -119,6 +119,9 @@ public:
     Image flatten(bool withPaper, bool onlyVisible = true) const;
     /// Colour of the picture under a point. mode 0 = all layers, 1 = current layer, 2 = current + below
     Color pickColor(int x, int y, int mode) const;
+    /// Colour of the paint only (no paper) under a point, alpha = 0 where nothing is painted.
+    /// Same modes as pickColor. Used by the colour mixing of the brush.
+    Color pickPaint(int x, int y, int mode) const;
 
     // ---- undo / redo ----
     int maxUndo = 16;

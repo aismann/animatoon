@@ -75,7 +75,8 @@ bool BrushParams::load(const std::string& file)
     if (pas < 0)
         pas = 5;
 
-    trait     = ini.getInt("paintline", 0);
+    // old presets have no "paintline" key : a continuous stroke is what the user expects
+    trait     = ini.getInt("paintline", 1);
     hardness  = ini.getInt("hardness", 0);
     softness  = ini.getInt("softness", 0);
     intensity = ini.getInt("intensity", 0);
@@ -519,15 +520,18 @@ Color BrushEngine::mixedColor(Document& doc, BrushParams& p, int x, int y)
 {
     if (p.mix <= 0 || _type != ToolType_Brush)
         return _baseColor;
-    float mix = std::min(p.mix, 100) * 0.01f;
-    // colour of the picture under the brush (BrushGetMixColor)
-    Color canvas = doc.pickColor(x, y, p.mixLayer == 1 ? 1 : (p.mixLayer == 0 ? 0 : 2));
-    bool nothing = p.mixLayer == 1 && canvas.a == 0;
+    // colour of the paint under the brush (BrushGetMixColor). The paper is not paint : where
+    // nothing has been painted yet the brush keeps its own colour.
+    Color canvas = doc.pickPaint(x, y, p.mixLayer == 1 ? 1 : (p.mixLayer == 0 ? 0 : 2));
+    bool nothing = canvas.a == 0;
+    float mix    = std::min(p.mix, 100) * 0.01f * (canvas.a / 255.f);
+    canvas.a     = 255;
     switch (p.mixType)
     {
     case 0: // classic : fades to the picked colour, the viscosity is the number of dots of the fade
     {
-        float tx = p.mix / (float)(p.visco + 1);
+        float pm = mix * 100.f;
+        float tx = pm / (float)(p.visco + 1);
         if (_viscoCur > 0)
             _viscoCur--;
         else
@@ -536,7 +540,7 @@ Color BrushEngine::mixedColor(Document& doc, BrushParams& p, int x, int y)
             _oldCol   = _col;
             _newCol   = nothing ? _col : canvas;
         }
-        float v = (p.mix - _viscoCur * tx) * 0.01f, u = 1.f - v;
+        float v = (pm - _viscoCur * tx) * 0.01f, u = 1.f - v;
         _col    = Color((int)(_newCol.r * v + _oldCol.r * u), (int)(_newCol.g * v + _oldCol.g * u),
                         (int)(_newCol.b * v + _oldCol.b * u), 255);
         return _col;

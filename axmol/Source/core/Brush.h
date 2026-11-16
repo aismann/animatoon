@@ -113,7 +113,7 @@ struct BrushParams
     int visco    = 0;
     int wash     = 1; ///< the brush takes its colour back at mouse up
     int water    = 0;
-    int mixLayer = 2; ///< 0 all layers, 1 current layer, 2 all below
+    int mixLayer = 1; ///< 0 all layers, 1 current layer, 2 current layer + the ones below
     int blendmode = Bm_Normal;
     int filter   = 20; ///< strength of light / dark / noise... tools
     int symetry  = 0;  ///< 0 none, 1 X, 2 Y, 3 XY, 4 the 4 views

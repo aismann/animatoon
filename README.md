@@ -8,6 +8,13 @@
 Animatoon is developped in [Purebasic][1] and has been created by Blendman (Since 2011, 2012-2015, 2017, 2021), with the help of a lot of people :) (Purebasic forums french, english and german) [Purebasic User Forum (english)][2]
 
 
+## Axmol 3.0 version (C++)
+
+The folder [axmol](axmol/) contains a rewrite of Animatoon for the [Axmol 3.0](https://axmol.dev) engine (C++, interface with Dear ImGui). It uses the same data (brushes, presets, papers, swatches...) and the same `.ani` documents as the PureBasic version, and runs on Linux, Windows and macOS. See [axmol/README.md](axmol/README.md) to build it.
+
+![animatoon axmol](screenshots/animatoon_axmol3.png)
+
+
 ## Videos (youtube)
 
 [![Animatoon Video timelapse](https://img.youtube.com/vi/jCmOMTAC71c/0.jpg)](https://www.youtube.com/watch?v=jCmOMTAC71c)

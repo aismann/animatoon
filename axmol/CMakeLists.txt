@@ -45,6 +45,13 @@ set(content_folder
   "${CMAKE_CURRENT_SOURCE_DIR}/Content"
 )
 
+# The data of Animatoon (papers, brushes, presets, themes, languages) are shared with the
+# PureBasic version : they stay in <repo>/data and are linked (or copied when the system
+# does not allow links) into Content/data.
+if(NOT EXISTS "${content_folder}/data")
+  file(CREATE_LINK "${CMAKE_CURRENT_SOURCE_DIR}/../data" "${content_folder}/data" COPY_ON_ERROR SYMBOLIC)
+endif()
+
 if(APPLE)
   ax_mark_multi_resources(common_content_files RES_TO "Resources" FOLDERS ${content_folder})
 elseif(WINDOWS)
