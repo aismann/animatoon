@@ -1,0 +1,6 @@
+build/
+build_*/
+run.bat
+Content/data
+.vs/
+*.user
