@@ -16,7 +16,11 @@ enum class State
     Paused
 };
 
-constexpr int kGrid = 15;  // 7x7 maze cells -> 15x15 tiles (odd coordinates are cells)
+// Maze: a 5x4 lattice of junction nodes, 6 tiles apart; the outer ring is always a corridor.
+constexpr int kSpacing = 6;
+constexpr int kNodesX = 5, kNodesY = 4;
+constexpr int kCols = (kNodesX - 1) * kSpacing + 1;  // 25
+constexpr int kRows = (kNodesY - 1) * kSpacing + 1;  // 19
 
 inline constexpr int kDX[4] = {0, 1, 0, -1};  // heading 0=N(+z) 1=E(+x) 2=S 3=W
 inline constexpr int kDZ[4] = {1, 0, -1, 0};
@@ -64,17 +68,18 @@ public:
     int hiScore = 0;
     bool newHiScore = false;
 
-    uint8_t wall[kGrid][kGrid];
+    uint8_t wall[kRows][kCols];
+    int mazeId = 0;          // changes whenever a new maze is generated
     std::vector<Pickup> pickups;
     std::vector<Ghost> ghosts;
     std::vector<Explosion> explosions;
     std::vector<Popup> popups;
 
     // player
-    float px = 7, pz = 7;
+    float px = 12, pz = 6;
     int heading = 0;         // 0..3
     bool pMoving = false;
-    int ptx = 7, ptz = 7;
+    int ptx = 12, ptz = 6;
     float chompAnim = 0;     // grows while moving, drives the mouth
     float invuln    = 0;
     float scaredT   = 0;     // remaining scared time
@@ -89,17 +94,18 @@ public:
     void update(float dt);
 
     // input
-    void turnLeft();
+    void steer(int dir);     // absolute direction 0=N(+z) 1=E 2=S 3=W (flat view)
+    void turnLeft();         // relative to heading (chase view)
     void turnRight();
     void reverse();
     void dropBomb();
     void togglePause();
 
-    bool open(int c, int r) const { return c >= 0 && r >= 0 && c < kGrid && r < kGrid && !wall[r][c]; }
+    bool open(int c, int r) const { return c >= 0 && r >= 0 && c < kCols && r < kRows && !wall[r][c]; }
 
 private:
     std::mt19937 rng{std::random_device{}()};
-    int pendingTurn = 0;
+    int pendingDir  = -1;
     bool chompAlt   = false;
     int ghostCombo  = 0;
     int nextBonusAt = 3000;

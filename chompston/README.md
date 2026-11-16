@@ -23,22 +23,27 @@ axmol build -p linux     # oder: -p win32 / mac
 cmake -S . -B build && cmake --build build
 ```
 
+## Ansicht
+
+Fenster 4:3 (768×576, Design 512×384). Titelbild mit animiertem Regenbogen-Logo (Sinuswelle), Menü START / OPTIONS / EXIT.
+Im Spiel (Standard): feste 2D-Draufsicht, Gänge sind die erhöhten Flächen (lila Kantenband), Wände sind schwarze Gruben,
+bunte Pellets, Herzen oben links. Mit **C** wechselst du zur 3D-Verfolgerkamera.
+
 ## Steuerung
 
 | Taste | Aktion |
 |---|---|
-| ←/→ oder A/D | links/rechts abbiegen (an der nächsten Kreuzung, im Stand sofort) |
-| ↓ oder S | umdrehen |
-| Leertaste / ↑ / Strg | Bombe (Radius ~3 Felder) |
-| C | Kamera: Draufsicht (Standard, Gänge sind die erhöhten Flächen, Bild dreht mit dem Spieler) / Verfolgerkamera |
+| Pfeile / WASD | Flache Ansicht: absolute Richtung (wird an der nächsten Kreuzung übernommen). Verfolgerkamera: ←/→ abbiegen, ↑/↓ umdrehen |
+| Menü | ↑/↓ wählen, Enter/Leertaste bestätigen, ←/→ Optionen ändern, Esc zurück |
+| Leertaste / Strg | Bombe (Radius ~3 Felder) |
+| C | Kamera: flache Draufsicht / 3D-Verfolger |
 | P / Esc | Pause |
-| Enter | Start / nach Game Over zurück zum Titel |
 | M / V / F / G | Musik an/aus · Lautstärke 0–5 · Fenster/Vollbild · Glättung |
-| Touch/Maus | linke/rechte Bildhälfte = abbiegen, unten Mitte = Bombe |
+| Maus/Touch | Menüeintrag antippen; im Spiel Richtung zum Tippunkt (flache Ansicht) |
 
 ## Konfiguration
 
-`settings.ini`: `Windowwidth` (quadratisches Fenster), `Vsync`, `FrameSkip` (0 = variabler Schritt, >0 = fester 60-Hz-Schritt mit
+`settings.ini`: `Windowwidth` (Höhe = 3/4 der Breite), `Vsync`, `FrameSkip` (0 = variabler Schritt, >0 = fester 60-Hz-Schritt mit
 bis zu n Aufhol-Schritten), `StoreUserDataLocally` (1 = `chomp.cfg` neben dem Spiel, 0 = Benutzerverzeichnis).
 `JoystickId`, `AudioOutputBufferSize`, `AudioUpdatePeriod` sind BASS-spezifisch; sie werden gelesen und erhalten,
 haben aber in Axmol keine Wirkung.

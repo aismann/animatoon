@@ -7,8 +7,8 @@
 
 using namespace ax;
 
-// The original game rendered at 512x512 (the texture atlases are 512x512) and scaled the window up.
-static const ax::Size designResolutionSize = ax::Size(512, 512);
+// The original window was 768x576 (4:3); the game is laid out in 512x384 and scaled up.
+static const ax::Size designResolutionSize = ax::Size(512, 384);  // 4:3, window 768x576 by default
 
 AppDelegate::AppDelegate() {}
 
@@ -37,7 +37,7 @@ bool AppDelegate::applicationDidFinishLaunching()
 #if (AX_TARGET_PLATFORM == AX_PLATFORM_WIN32) || (AX_TARGET_PLATFORM == AX_PLATFORM_MAC) || \
     (AX_TARGET_PLATFORM == AX_PLATFORM_LINUX)
         if (st.windowed)
-            renderView = RenderView::createWithRect("Chompston", ax::Rect(0, 0, (float)st.windowWidth, (float)st.windowWidth));
+            renderView = RenderView::createWithRect("Chompston", ax::Rect(0, 0, (float)st.windowWidth, (float)(st.windowWidth * 3 / 4)));
         else
             renderView = RenderView::createWithFullscreen("Chompston");
 #else

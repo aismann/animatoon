@@ -25,45 +25,60 @@ void Game::generateMaze()
     for (auto& row : wall)
         for (auto& w : row)
             w = 1;
+    ++mazeId;
 
-    // recursive backtracker on the 7x7 cell lattice
-    const int N = (kGrid - 1) / 2;
-    std::vector<uint8_t> seen(N * N, 0);
-    std::vector<int> stack;
-    auto carve = [&](int ci, int cj) { wall[2 * cj + 1][2 * ci + 1] = 0; };
-    int ci = N / 2, cj = N / 2;
-    seen[cj * N + ci] = 1;
-    carve(ci, cj);
-    stack.push_back(cj * N + ci);
-    while (!stack.empty())
+    // nodes on the lattice, edges between neighbours; boundary edges are always corridors so the
+    // outer ring exists, interior edges are picked at random (spanning + a few loops)
+    struct Edge { int x0, y0, x1, y1; bool ring; };
+    std::vector<Edge> edges;
+    for (int j = 0; j < kNodesY; ++j)
+        for (int i = 0; i < kNodesX; ++i)
+        {
+            if (i + 1 < kNodesX) edges.push_back({i, j, i + 1, j, j == 0 || j == kNodesY - 1});
+            if (j + 1 < kNodesY) edges.push_back({i, j, i, j + 1, i == 0 || i == kNodesX - 1});
+        }
+    std::vector<int> parent(kNodesX * kNodesY);
+    for (size_t k = 0; k < parent.size(); ++k)
+        parent[k] = (int)k;
+    auto find = [&](int a) {
+        while (parent[a] != a)
+            a = parent[a] = parent[parent[a]];
+        return a;
+    };
+    auto carve = [&](const Edge& e) {
+        for (int t = 0; t <= kSpacing; ++t)
+            wall[e.y0 * kSpacing + (e.y1 - e.y0) * t][e.x0 * kSpacing + (e.x1 - e.x0) * t] = 0;
+    };
+    std::vector<Edge> interior;
+    for (auto& e : edges)
     {
-        int cur = stack.back();
-        int i = cur % N, j = cur / N;
-        int opts[4], n = 0;
-        for (int d = 0; d < 4; ++d)
+        if (e.ring)
         {
-            int ni = i + kDX[d], nj = j + kDZ[d];
-            if (ni >= 0 && nj >= 0 && ni < N && nj < N && !seen[nj * N + ni])
-                opts[n++] = d;
+            carve(e);
+            parent[find(e.y0 * kNodesX + e.x0)] = find(e.y1 * kNodesX + e.x1);
         }
-        if (!n)
-        {
-            stack.pop_back();
-            continue;
-        }
-        int d  = opts[rnd(n)];
-        int ni = i + kDX[d], nj = j + kDZ[d];
-        wall[2 * j + 1 + kDZ[d]][2 * i + 1 + kDX[d]] = 0;  // knock out the wall between
-        carve(ni, nj);
-        seen[nj * N + ni] = 1;
-        stack.push_back(nj * N + ni);
+        else
+            interior.push_back(e);
     }
-    // braid: remove some extra walls so there are loops (ghosts can chase, player can escape)
-    for (int k = 0; k < 18 + level; ++k)
+    std::shuffle(interior.begin(), interior.end(), rng);
+    for (auto& e : interior)
     {
-        int c = 1 + rnd(kGrid - 2), r = 1 + rnd(kGrid - 2);
-        if (((c & 1) ^ (r & 1)) == 1)  // wall piece between two cells
-            wall[r][c] = 0;
+        int a = find(e.y0 * kNodesX + e.x0), b = find(e.y1 * kNodesX + e.x1);
+        if (a != b || rnd(100) < 38)
+        {
+            carve(e);
+            parent[a] = b;
+        }
+    }
+    // interior nodes might still be isolated if the ring never reached them: connect every component
+    for (auto& e : interior)
+    {
+        int a = find(e.y0 * kNodesX + e.x0), b = find(e.y1 * kNodesX + e.x1);
+        if (a != b)
+        {
+            carve(e);
+            parent[a] = b;
+        }
     }
 }
 
@@ -76,10 +91,10 @@ void Game::buildLevel()
     heartSpawned = false;
     pelletsTotal = 0;
 
-    const int sc = kGrid / 2 | 1, sr = sc;  // 7,7
-    int powerC[4] = {1, 7, 13, 7}, powerR[4] = {7, 1, 7, 13};
-    for (int r = 0; r < kGrid; ++r)
-        for (int c = 0; c < kGrid; ++c)
+    const int sc = 2 * kSpacing, sr = kSpacing;  // start node (12,6)
+    int powerC[4] = {0, kCols - 1, 0, kCols - 1}, powerR[4] = {kSpacing, kSpacing, 2 * kSpacing, 2 * kSpacing};
+    for (int r = 0; r < kRows; ++r)
+        for (int c = 0; c < kCols; ++c)
         {
             if (wall[r][c] || (c == sc && r == sr))
                 continue;
@@ -99,8 +114,8 @@ void Game::buildLevel()
     // one bomb somewhere far from the start
     for (int tries = 0; tries < 200; ++tries)
     {
-        int c = 1 + rnd(kGrid - 2), r = 1 + rnd(kGrid - 2);
-        if (wall[r][c] || dist2((float)c, (float)r, (float)sc, (float)sr) < 25.f)
+        int c = rnd(kCols), r = rnd(kRows);
+        if (wall[r][c] || dist2((float)c, (float)r, (float)sc, (float)sr) < 64.f)
             continue;
         for (auto& p : pickups)
             if (p.c == c && p.r == r && p.kind == Pickup::Kind::Pellet)
@@ -117,15 +132,15 @@ void Game::buildLevel()
 
 void Game::resetActors()
 {
-    px = ptx = 7;
-    pz = ptz = 7;
+    px = ptx = 2 * kSpacing;
+    pz = ptz = kSpacing;
     heading  = 0;
     pMoving  = false;
-    pendingTurn = 0;
+    pendingDir = -1;
     invuln   = 2.0f;
     scaredT  = 0;
 
-    const int homes[6][2] = {{1, 1}, {13, 13}, {13, 1}, {1, 13}, {1, 5}, {13, 9}};
+    const int homes[6][2] = {{0, 0}, {kCols - 1, kRows - 1}, {kCols - 1, 0}, {0, kRows - 1}, {2 * kSpacing, 0}, {2 * kSpacing, kRows - 1}};
     int count = std::min(6, 3 + (level - 1) / 2);
     ghosts.assign(count, Ghost());
     for (int i = 0; i < count; ++i)
@@ -171,41 +186,36 @@ void Game::setState(State s)
 
 // ---------------------------------------------------------------- input
 
-void Game::turnLeft()
+void Game::steer(int dir)
 {
     if (state != State::Playing)
         return;
-    if (!pMoving)
+    dir &= 3;
+    if (dir == ((heading + 2) & 3))
     {
-        heading = (heading + 3) & 3;
-        if (open((int)std::lround(px) + kDX[heading], (int)std::lround(pz) + kDZ[heading]))
-        {
-            pMoving = true;
-            ptx = (int)std::lround(px) + kDX[heading];
-            ptz = (int)std::lround(pz) + kDZ[heading];
-        }
+        reverse();
+        return;
+    }
+    int cc = (int)std::lround(px), cr = (int)std::lround(pz);
+    if (dir == heading)
+        pendingDir = -1;
+    else if (!pMoving && open(cc + kDX[dir], cr + kDZ[dir]))
+    {
+        heading    = dir;
+        pendingDir = -1;
     }
     else
-        pendingTurn = -1;
+        pendingDir = dir;  // taken at the next tile centre where it is possible
+    if (!pMoving && open(cc + kDX[heading], cr + kDZ[heading]))
+    {
+        pMoving = true;
+        ptx     = cc + kDX[heading];
+        ptz     = cr + kDZ[heading];
+    }
 }
 
-void Game::turnRight()
-{
-    if (state != State::Playing)
-        return;
-    if (!pMoving)
-    {
-        heading = (heading + 1) & 3;
-        if (open((int)std::lround(px) + kDX[heading], (int)std::lround(pz) + kDZ[heading]))
-        {
-            pMoving = true;
-            ptx = (int)std::lround(px) + kDX[heading];
-            ptz = (int)std::lround(pz) + kDZ[heading];
-        }
-    }
-    else
-        pendingTurn = +1;
-}
+void Game::turnLeft() { steer((heading + 3) & 3); }
+void Game::turnRight() { steer((heading + 1) & 3); }
 
 void Game::reverse()
 {
@@ -219,7 +229,7 @@ void Game::reverse()
         heading = (heading + 2) & 3;
         ptx     = sx;
         ptz     = sz;
-        pendingTurn = 0;
+        pendingDir = -1;
     }
     else
     {
@@ -351,15 +361,11 @@ void Game::playerArrive()
     pz = (float)ptz;
     eatAt(ptx, ptz);
 
-    if (pendingTurn)
+    if (pendingDir >= 0 && open(ptx + kDX[pendingDir], ptz + kDZ[pendingDir]))
     {
-        int nh = (heading + pendingTurn + 4) & 3;
-        pendingTurn = 0;
-        if (open(ptx + kDX[nh], ptz + kDZ[nh]))
-        {
-            heading = nh;
-            Sound::play(Sfx::Turn);
-        }
+        heading    = pendingDir;
+        pendingDir = -1;
+        Sound::play(Sfx::Turn);
     }
     if (open(ptx + kDX[heading], ptz + kDZ[heading]))
     {
@@ -373,6 +379,14 @@ void Game::playerArrive()
 
 void Game::updatePlayer(float dt)
 {
+    if (!pMoving && pendingDir >= 0 && open((int)std::lround(px) + kDX[pendingDir], (int)std::lround(pz) + kDZ[pendingDir]))
+    {
+        heading = pendingDir;
+        pendingDir = -1;
+        ptx = (int)std::lround(px) + kDX[heading];
+        ptz = (int)std::lround(pz) + kDZ[heading];
+        pMoving = true;
+    }
     if (!pMoving)
         return;
     float remaining = playerSpeed() * dt;
@@ -575,7 +589,7 @@ void Game::update(float dt)
             heartSpawned = true;
             for (int tries = 0; tries < 200; ++tries)
             {
-                int c = 1 + rnd(kGrid - 2), r = 1 + rnd(kGrid - 2);
+                int c = rnd(kCols), r = rnd(kRows);
                 if (wall[r][c] || (c == (int)std::lround(px) && r == (int)std::lround(pz)))
                     continue;
                 Pickup p;
