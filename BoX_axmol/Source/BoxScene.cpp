@@ -8,6 +8,8 @@ constexpr float kPPM     = 100.f;                // Pixel pro Meter (Box2D rechn
 constexpr float kStep    = 1.f / 60.f / 3.f;     // 3 Substeps pro Frame wie im Original
 constexpr float kBallR   = 20.f / kPPM;
 constexpr int   kLevels  = 4;
+constexpr float kPartR   = 6.f / kPPM;
+constexpr int   kFluidWin = 8;                  // Partikel im Ziel zum Gewinnen
 constexpr float kWinDist = 23.f / kPPM;
 const Color kBlack(0, 0, 0, 1), kBlue(0, 0, 1, 1), kRed(1, 0, 0, 1);
 
@@ -44,15 +46,34 @@ bool BoxScene::init()
     _draw = DrawNode::create();
     addChild(_draw);
 
-    startLevel(1);
-
     auto kb = KeyboardEventListener::create();
     kb->onKeyPressed = [this](KeyboardEvent* e) {
-        switch (e->getKeyCode())
+        using K = KeyboardEvent::KeyCode;
+        K k = e->getKeyCode();
+        if (_state == State::Menu)
         {
-        case KeyboardEvent::KeyCode::KEY_LEFT_ARROW:  _left = true; break;
-        case KeyboardEvent::KeyCode::KEY_RIGHT_ARROW: _right = true; break;
-        case KeyboardEvent::KeyCode::KEY_ESCAPE:      Director::getInstance()->end(); break;
+            switch (k)
+            {
+            case K::KEY_LEFT_ARROW:
+            case K::KEY_RIGHT_ARROW: _mode = (_mode == Mode::Ball) ? Mode::Fluid : Mode::Ball; break;
+            case K::KEY_1: _mode = Mode::Ball; break;
+            case K::KEY_2: _mode = Mode::Fluid; break;
+            case K::KEY_UP_ARROW:   _menuLevel = _menuLevel % kLevels + 1; break;
+            case K::KEY_DOWN_ARROW: _menuLevel = (_menuLevel + kLevels - 2) % kLevels + 1; break;
+            case K::KEY_ENTER:
+            case K::KEY_KP_ENTER:
+            case K::KEY_RETURN:
+            case K::KEY_SPACE: startGame(); break;
+            case K::KEY_ESCAPE: Director::getInstance()->end(); break;
+            default: break;
+            }
+            return;
+        }
+        switch (k)
+        {
+        case K::KEY_LEFT_ARROW:  _left = true; break;
+        case K::KEY_RIGHT_ARROW: _right = true; break;
+        case K::KEY_ESCAPE:      _state = State::Menu; break;   // zurueck ins Menue
         default: break;
         }
     };
@@ -70,8 +91,19 @@ void BoxScene::startLevel(int level)
 {
     if (B2_IS_NON_NULL(_world)) b2DestroyWorld(_world);
     _segs.clear();
+    _parts.clear();
+    _ball = b2_nullBodyId;
     _level = level; _won = false; _w = 0.f; _winTimer = 0.f; _elapsed = 0.0;
     buildWorld(level);
+}
+
+void BoxScene::startGame()
+{
+    _left = _right = false;
+    _finished = false;
+    _finishTimer = 0.f;
+    _state = State::Play;
+    startLevel(_menuLevel);
 }
 
 void BoxScene::buildWorld(int level)
@@ -134,19 +166,98 @@ void BoxScene::buildWorld(int level)
     b2Circle goal{_goalLocal, _goalR};
     b2CreateCircleShape(_boxBody, &gd, &goal);
 
-    // Ball (Original: Startposition 500/150 im Fenster, y nach unten)
-    b2BodyDef ballDef = b2DefaultBodyDef();
-    ballDef.type      = b2_dynamicBody;
-    ballDef.position  = {500.f / kPPM, (kWin - 150.f) / kPPM};
-    _ball             = b2CreateBody(_world, &ballDef);
-    b2ShapeDef bs     = sd;
-    bs.density        = 1.f;
-    b2Circle circle{{0.f, 0.f}, kBallR};
-    b2CreateCircleShape(_ball, &bs, &circle);
+    if (_mode == Mode::Ball)
+    {
+        // Ball (Original: Startposition 500/150 im Fenster, y nach unten)
+        b2BodyDef ballDef = b2DefaultBodyDef();
+        ballDef.type      = b2_dynamicBody;
+        ballDef.position  = {500.f / kPPM, (kWin - 150.f) / kPPM};
+        _ball             = b2CreateBody(_world, &ballDef);
+        b2ShapeDef bs     = sd;
+        bs.density        = 1.f;
+        b2Circle circle{{0.f, 0.f}, kBallR};
+        b2CreateCircleShape(_ball, &bs, &circle);
+    }
+    else
+    {
+        // Fluid: 3 x 30 kleine Kreise im oberen Streifen des Kastens (Container steht bei Start still)
+        b2ShapeDef ps           = b2DefaultShapeDef();
+        ps.material.friction    = 0.05f;
+        ps.material.restitution = 0.f;
+        ps.density              = 1.f;
+        b2Circle pc{{0.f, 0.f}, kPartR};
+        for (int r = 0; r < 3; ++r)
+            for (int c = 0; c < 30; ++c)
+            {
+                b2Vec2 l          = V(190.f - c * 12.5f, -188.f + r * 14.f);
+                b2BodyDef pd      = b2DefaultBodyDef();
+                pd.type           = b2_dynamicBody;
+                pd.linearDamping  = 0.05f;
+                pd.position       = {320.f / kPPM + l.x, 320.f / kPPM + l.y};
+                b2BodyId id       = b2CreateBody(_world, &pd);
+                b2CreateCircleShape(id, &ps, &pc);
+                _parts.push_back(id);
+            }
+    }
+}
+
+// Box2D 3.x hat kein eingebautes Fluid (LiquidFun entfaellt): Partikel-Fluid aus Kreisen
+// plus Viskositaet (Geschwindigkeits-Angleichung) und schwache Kohaesion zwischen Nachbarn.
+void BoxScene::stepFluid()
+{
+    const size_t n = _parts.size();
+    std::vector<b2Vec2> pos(n), vel(n);
+    for (size_t i = 0; i < n; ++i)
+    {
+        pos[i] = toV(b2Body_GetPosition(_parts[i]));
+        vel[i] = b2Body_GetLinearVelocity(_parts[i]);
+    }
+    const float h = 0.20f, dt = 1.f / 60.f;
+    for (size_t i = 0; i < n; ++i)
+    {
+        b2Vec2 dv{0.f, 0.f}, coh{0.f, 0.f};
+        float wsum = 0.f;
+        for (size_t j = 0; j < n; ++j)
+        {
+            if (i == j) continue;
+            b2Vec2 d = b2Sub(pos[j], pos[i]);
+            float dist = std::sqrt(d.x * d.x + d.y * d.y);
+            if (dist >= h || dist < 1e-5f) continue;
+            float w = 1.f - dist / h;
+            dv   = b2Add(dv, b2MulSV(w, b2Sub(vel[j], vel[i])));
+            wsum += w;
+            if (dist > 2.f * kPartR)   // nur anziehen, wenn nicht im Kontakt
+                coh = b2Add(coh, b2MulSV(w / dist, d));
+        }
+        if (wsum <= 0.f) continue;
+        b2Vec2 acc = b2Add(b2MulSV(0.3f / wsum / dt, dv), b2MulSV(3.f, coh));   // Viskositaet + Kohaesion
+        float m    = b2Body_GetMass(_parts[i]);
+        b2Body_ApplyLinearImpulseToCenter(_parts[i], b2MulSV(m * dt, acc), true);
+    }
+}
+
+int BoxScene::countParticlesInGoal() const
+{
+    b2Vec2 g = toV(b2Body_GetWorldPoint(_boxBody, _goalLocal));
+    int cnt  = 0;
+    for (b2BodyId id : _parts)
+    {
+        b2Vec2 p = toV(b2Body_GetPosition(id));
+        b2Vec2 d = b2Sub(p, g);
+        if (d.x * d.x + d.y * d.y < (_goalR + kPartR) * (_goalR + kPartR)) ++cnt;
+    }
+    return cnt;
 }
 
 void BoxScene::update(float dt)
 {
+    if (_state == State::Menu)
+    {
+        _menuT += dt;
+        _won = false;
+        drawMenu();
+        return;
+    }
     if (_won)
     {
         _winTimer += dt;
@@ -155,6 +266,7 @@ void BoxScene::update(float dt)
             if (_level < kLevels) startLevel(_level + 1);
             else _finished = true;
         }
+        if (_finished && (_finishTimer += dt) > 3.f) _state = State::Menu;
         draw();
         return;
     }
@@ -164,11 +276,17 @@ void BoxScene::update(float dt)
     if (_right) _w -= 0.2f;   // y-Achse gespiegelt: rechts = im Uhrzeigersinn = negativ
     b2Body_SetAngularVelocity(_boxBody, _w);
 
+    if (_mode == Mode::Fluid) stepFluid();
     for (int i = 0; i < 3; ++i) b2World_Step(_world, kStep, 4);
 
     b2Vec2 g = toV(b2Body_GetWorldPoint(_boxBody, _goalLocal));
-    b2Vec2 b = toV(b2Body_GetPosition(_ball));
-    if (std::abs(b.x - g.x) < kWinDist && std::abs(b.y - g.y) < kWinDist)
+    if (_mode == Mode::Ball)
+    {
+        b2Vec2 b = toV(b2Body_GetPosition(_ball));
+        if (std::abs(b.x - g.x) < kWinDist && std::abs(b.y - g.y) < kWinDist)
+            _won = true;
+    }
+    else if (countParticlesInGoal() >= kFluidWin)
         _won = true;
 
     draw();
@@ -188,27 +306,36 @@ void BoxScene::draw()
     // Ziel
     _draw->drawCircle(px(toV(b2Body_GetWorldPoint(_boxBody, _goalLocal))), _goalR * kPPM, kBlack, 1.f);
 
-    // Ball mit Winkelstrich
-    Vec2 p  = px(toV(b2Body_GetPosition(_ball)));
-    float a = b2Rot_GetAngle(b2Body_GetRotation(_ball));
-    _draw->drawCircle(p, kBallR * kPPM, kBlack, 1.f);
-    _draw->drawLine(p, Vec2(p.x + cosf(a) * kBallR * kPPM, p.y + sinf(a) * kBallR * kPPM), kBlack, 1.f);
-
-    // Kontaktpunkte (rot). anchorA ist relativ zum Body von Shape A.
-    int cap = b2Body_GetContactCapacity(_ball);
-    if (cap > 0)
+    if (_mode == Mode::Ball)
     {
-        std::vector<b2ContactData> cd(cap);
-        int n = b2Body_GetContactData(_ball, cd.data(), cap);
-        for (int i = 0; i < n; ++i)
+        // Ball mit Winkelstrich
+        Vec2 p  = px(toV(b2Body_GetPosition(_ball)));
+        float a = b2Rot_GetAngle(b2Body_GetRotation(_ball));
+        _draw->drawCircle(p, kBallR * kPPM, kBlack, 1.f);
+        _draw->drawLine(p, Vec2(p.x + cosf(a) * kBallR * kPPM, p.y + sinf(a) * kBallR * kPPM), kBlack, 1.f);
+
+        // Kontaktpunkte (rot). anchorA ist relativ zum Body von Shape A.
+        int cap = b2Body_GetContactCapacity(_ball);
+        if (cap > 0)
         {
-            b2Vec2 origin = toV(b2Body_GetPosition(b2Shape_GetBody(cd[i].shapeIdA)));
-            for (int k = 0; k < cd[i].manifold.pointCount; ++k)
+            std::vector<b2ContactData> cd(cap);
+            int n = b2Body_GetContactData(_ball, cd.data(), cap);
+            for (int i = 0; i < n; ++i)
             {
-                b2Vec2 w = b2Add(origin, cd[i].manifold.points[k].anchorA);
-                _draw->drawDot(px(w), 2.f, kRed);
+                b2Vec2 origin = toV(b2Body_GetPosition(b2Shape_GetBody(cd[i].shapeIdA)));
+                for (int k = 0; k < cd[i].manifold.pointCount; ++k)
+                {
+                    b2Vec2 w = b2Add(origin, cd[i].manifold.points[k].anchorA);
+                    _draw->drawDot(px(w), 2.f, kRed);
+                }
             }
         }
+    }
+    else
+    {
+        const Color water(0.1f, 0.35f, 0.95f, 0.85f);
+        for (b2BodyId id : _parts)
+            _draw->drawDot(px(toV(b2Body_GetPosition(id))), kPartR * kPPM, water);
     }
 
     // Zeit als 7-Segment (statt Label, da nur DrawNode erlaubt)
@@ -241,4 +368,65 @@ void BoxScene::drawTime(long ms, Vec2 pos)
     if (s.size() < 4) s.insert(0, 4 - s.size(), '0');
     float x = pos.x, size = 8.f;
     for (char c : s) { drawDigit(c - '0', Vec2(x, pos.y), size); x += size + 8; }
+}
+
+void BoxScene::drawMenu()
+{
+    _draw->clear();
+    const float cx = kWin / 2;
+
+    // Titel: drehender Kasten mit Ball und Ziel (Logo)
+    float a = _menuT * 0.8f;
+    auto rot = [&](float x, float y) {
+        return Vec2(cx + x * cosf(a) - y * sinf(a), 520 + x * sinf(a) + y * cosf(a));
+    };
+    const float s = 50.f;
+    Vec2 q[4] = {rot(-s, -s), rot(-s, s), rot(s, s), rot(s, -s)};
+    for (int i = 0; i < 4; ++i) _draw->drawLine(q[i], q[(i + 1) % 4], kBlack, 2.f);
+    _draw->drawLine(rot(-s, 0), rot(s * 0.5f, 0), kBlack, 2.f);
+    _draw->drawCircle(rot(s * 0.6f, s * 0.6f), 8.f, kBlack, 1.f);
+    _draw->drawDot(rot(0, -s * 0.5f), 7.f, kBlack);
+
+    // Zwei Felder: 1 = ein Ball, 2 = Fluid
+    for (int m = 0; m < 2; ++m)
+    {
+        bool sel   = (int)_mode == m;
+        float px0  = (m == 0 ? 175.f : 465.f);
+        Vec2 lo(px0 - 110, 190), hi(px0 + 110, 420);
+        float th   = sel ? 4.f : 1.f;
+        Color col  = sel ? kBlue : kBlack;
+        _draw->drawLine(lo, Vec2(hi.x, lo.y), col, th);
+        _draw->drawLine(Vec2(hi.x, lo.y), hi, col, th);
+        _draw->drawLine(hi, Vec2(lo.x, hi.y), col, th);
+        _draw->drawLine(Vec2(lo.x, hi.y), lo, col, th);
+
+        Vec2 c(px0, 330);
+        if (m == 0)
+        {
+            float b = sel ? sinf(_menuT * 6.f) * 10.f : 0.f;   // Ball wippt, wenn gewaehlt
+            _draw->drawCircle(Vec2(c.x, c.y + b), 40.f, kBlack, 2.f);
+            _draw->drawLine(Vec2(c.x, c.y + b), Vec2(c.x + 40.f * cosf(_menuT * 3.f), c.y + b + 40.f * sinf(_menuT * 3.f)),
+                            kBlack, 2.f);
+        }
+        else
+        {
+            const Color water(0.1f, 0.35f, 0.95f, 0.85f);
+            for (int r = 0; r < 4; ++r)
+                for (int k = 0; k < 8; ++k)
+                {
+                    float wave = sel ? sinf(_menuT * 5.f + k * 0.8f) * 4.f : 0.f;
+                    _draw->drawDot(Vec2(c.x - 70 + k * 20.f, c.y - 30 + r * 16.f + wave), 7.f, water);
+                }
+        }
+        drawDigit(m + 1, Vec2(px0 - 8, 215), 8.f);
+    }
+
+    // Start-Level (Hoch/Runter): Ziffern 1-4, aktuelles gefuellt markiert
+    for (int i = 1; i <= kLevels; ++i)
+    {
+        float x = cx - 90 + (i - 1) * 60.f;
+        drawDigit(i, Vec2(x - 8, 110), 8.f);
+        if (i == _menuLevel) _draw->drawDot(Vec2(x, 85), 5.f, kBlue);
+        else _draw->drawCircle(Vec2(x, 85), 5.f, kBlack, 1.f);
+    }
 }

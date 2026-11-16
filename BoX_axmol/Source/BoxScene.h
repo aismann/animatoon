@@ -1,5 +1,5 @@
 #pragma once
-// BoX - Port von PureBasic (Chipmunk) nach Axmol, Physik jetzt Box2D 3.x 3.0. Gezeichnet wird ausschliesslich mit ax::DrawNode.
+// BoX - Port von PureBasic (Chipmunk) nach Axmol, Physik jetzt Box2D 3.x. Gezeichnet wird ausschliesslich mit ax::DrawNode.
 #include "axmol.h"
 #include "box2d/box2d.h"
 #include <vector>
@@ -16,8 +16,15 @@ private:
     void buildWorld(int level);
     void startLevel(int level);
     void draw();
+    void drawMenu();
+    void startGame();
+    void stepFluid();
+    int countParticlesInGoal() const;
     void drawDigit(int digit, ax::Vec2 pos, float size);
     void drawTime(long ms, ax::Vec2 pos);
+
+    enum class State { Menu, Play };
+    enum class Mode { Ball, Fluid };
 
     struct Seg { b2Vec2 a, b; };   // lokale Container-Koordinaten (Meter)
 
@@ -31,6 +38,13 @@ private:
     float _winTimer = 0.f;    // Pause nach dem Treffer, dann naechstes Level
     bool _finished = false;   // alle Levels geschafft
     std::vector<Seg> _segs;
+    std::vector<b2BodyId> _parts;   // Fluid-Partikel
+
+    State _state   = State::Menu;
+    Mode _mode     = Mode::Ball;    // im Menue gewaehlt
+    int _menuLevel = 1;             // Start-Level im Menue
+    float _menuT   = 0.f;           // Animationszeit Menue
+    float _finishTimer = 0.f;
 
     bool _left = false, _right = false, _won = false;
     float _w         = 0.f;   // Winkelgeschwindigkeit des Containers
