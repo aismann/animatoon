@@ -5,6 +5,7 @@
 #include <string_view>
 
 #include "Drawing3D.h"
+#include "DrawNode3D.h"
 #include "axmol.h"
 
 namespace d3d
@@ -15,6 +16,12 @@ namespace d3d
 // with the origin at the *bottom left* (Axmol convention; the PureBasic version has it top left).
 // Wrap the node in an ax::ClippingRectangleNode to cut off geometry beyond the canvas.
 void renderToDrawNode(const Drawing3D& g, ax::DrawNode* node);
+
+// Alternative wireframe path: fills a DrawNode3D (real 3D lines with GPU depth test, drawn by an
+// ax::Camera) with all lines of the scene (outline mode / drawLine3D). Lines are in scene space:
+// the scene rotation is applied, the camera offset is not - place/orient your ax::Camera as you like.
+// Axmol's y axis is up, so y is NOT flipped here.
+void renderLinesToDrawNode3D(const Drawing3D& g, ax::DrawNode3D* node);
 
 // Image3D from an ax::Image (RGBA8, RGB8, BGRA8 supported) or an image file.
 Image3DPtr image3DFromImage(ax::Image* image);

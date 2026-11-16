@@ -7,6 +7,7 @@ rendering through `ax::DrawNode`.
 |---|---|
 | `Drawing3D.h/.cpp` | Renderer core (no Axmol dependency): camera, rotation, lights, clipping, projection, depth sort |
 | `Drawing3DAx.h/.cpp` | Axmol glue: `renderToDrawNode`, `Image3D` from `ax::Image`, text rasteriser, PNG export |
+| `DrawNode3D.h/.cpp` | Axmol's `DrawNode3D` (3D lines/cubes with GPU depth test), taken from the Axmol cpp-tests |
 | `Drawing3DScenes.h/.cpp` | The 13 scenes of `Demo.pb` and the three examples (no Axmol dependency) |
 | `Drawing3DDemo.h/.cpp` | `Drawing3DDemo` (Demo.pb UI) and `Drawing3DExample` (Example01-03) as `ax::Scene` |
 | `demo/Image.png` | Texture for scene 5 (copy it into the app's Resources) |
@@ -47,6 +48,13 @@ Colours use the PureBasic layout `$AABBGGRR` (`d3d::rgba(r,g,b,a)` == `RGBA()`),
 | `#Drawing3D_Ignore` | `d3d::Ignore` |
 | `CreateImage3D(#id, image)` / `FreeImage3D` | `image3DFromFile()` / `image3DFromImage()` returning a `shared_ptr` (no numeric ids) |
 | `Drawing3DStyle`, clusters | not ported (empty / unfinished in the original) |
+
+## Wireframes with DrawNode3D
+
+`Drawing3D` also records every line (outline mode, `drawLine3D`) as a real 3D segment (`lines3D()`, scene space).
+`d3d::renderLinesToDrawNode3D(g, node3d)` fills an `ax::DrawNode3D` with them, so wireframes can be drawn by an
+`ax::Camera` with a hardware depth test instead of the projected 2D path. `DrawNode3D::drawLine` takes one colour
+per line, so gradient lines use the mean colour. `DrawNode3D.cpp` must be part of the target (it is the Axmol test class).
 
 ## Differences to the original (DrawNode has no per-pixel depth buffer)
 

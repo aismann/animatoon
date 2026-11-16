@@ -126,6 +126,7 @@ void Drawing3D::start(int width, int height, float fieldOfView)
     background_ = {};
     lights_.clear();
     triangles_.clear();
+    lines3D_.clear();
 }
 
 void Drawing3D::stop()
@@ -326,6 +327,7 @@ void Drawing3D::pushTriangle(Vtx a, Vtx b, Vtx c, const Image3D* texture)
 
 void Drawing3D::pushLine(Vtx a, Vtx b)
 {
+    lines3D_.push_back({a.p + position_, b.p + position_, a.c, b.c});
     // Clip against the near plane.
     const bool ain = a.p.z <= -nearPlane_, bin = b.p.z <= -nearPlane_;
     if (!ain && !bin)

@@ -115,6 +115,14 @@ struct ScreenTriangle
     float depth;  // view-space z (negative, more negative = further away)
 };
 
+// A line segment in *scene space* (scene rotation applied, camera position not subtracted),
+// premultiplied colours. For rendering wireframes with a real 3D line renderer (DrawNode3D).
+struct Line3D
+{
+    Vec3 a, b;
+    Color4 ca, cb;
+};
+
 // ---------------------------------------------------------------------------
 // The renderer
 // ---------------------------------------------------------------------------
@@ -174,6 +182,9 @@ public:
 
     // --- Results -----------------------------------------------------------
     const std::vector<ScreenTriangle>& triangles() const { return triangles_; }
+    // All lines of the scene (outline mode, drawLine3D) in scene space, unclipped.
+    const std::vector<Line3D>& lines3D() const { return lines3D_; }
+    Vec3 cameraPosition() const { return position_; }
     Color4 background() const { return background_; }
     int width() const { return width_; }
     int height() const { return height_; }
@@ -218,6 +229,7 @@ private:
     };
     std::vector<Light> lights_;
     std::vector<ScreenTriangle> triangles_;
+    std::vector<Line3D> lines3D_;
 
     float nearPlane_   = 1.0f;
     float subdivision_ = 0.0f;

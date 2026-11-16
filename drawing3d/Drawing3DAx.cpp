@@ -34,6 +34,18 @@ void renderToDrawNode(const Drawing3D& g, ax::DrawNode* node)
     }
 }
 
+void renderLinesToDrawNode3D(const Drawing3D& g, ax::DrawNode3D* node)
+{
+    node->clear();
+    for (const Line3D& l : g.lines3D())
+    {
+        // DrawNode3D::drawLine has a single colour per line: use the mean of both ends.
+        const ax::Color c((l.ca.r + l.cb.r) * 0.5f, (l.ca.g + l.cb.g) * 0.5f, (l.ca.b + l.cb.b) * 0.5f,
+                          (l.ca.a + l.cb.a) * 0.5f);
+        node->drawLine(ax::Vec3(l.a.x, l.a.y, l.a.z), ax::Vec3(l.b.x, l.b.y, l.b.z), c);
+    }
+}
+
 Image3DPtr image3DFromImage(ax::Image* image)
 {
     if (!image || !image->getData())
