@@ -32,7 +32,7 @@ Metaballs mit Clipper2 (`Source/MetaballMesh.h`, header-only): Marching-Squares-
 sind halbtransparente Wasserschichten (`kWaterAlpha`, Standard 0,32) ohne Doppelblending moeglich.
 Clipper2 ist in Axmol bereits gebuendelt (`clipper2/clipper.h`, `clipper2/clipper.triangulation.h`).
 
-Level-Editor (nur DrawNode): im Menue mit **E** oder per Klick den Schalter (unten rechts, Stift-Symbol) einschalten
+Level-Editor (nur DrawNode): im Menue mit **E** oder per Mausklick den Schalter (unten rechts, Stift-Symbol) einschalten
 (grau = aus, orange = an), dann startet **Enter/Space** den Editor fuer das gewaehlte Level (Hoch/Runter).
 - Werkzeuge: **1** Wand (mit der Maus ziehen, Raster 10 px), **2** Ziel setzen (Klick), **3** Radierer (Klick auf Wand);
   rechte Maustaste loescht immer.

@@ -116,7 +116,14 @@ bool BoxScene::init()
     };
     ptr->onPointerMove = [this](PointerEvent* e) { if (_state == State::Editor) editorPointer(1, e->getWorldPoint(), 0); };
     ptr->onPointerUp   = [this](PointerEvent* e) { if (_state == State::Editor) editorPointer(2, e->getWorldPoint(), 0); };
-    _eventDispatcher->addEventListenerWithFixedPriority(ptr, 1);
+    // Fixed-Priority-Listener bekommen in Axmol keinen Kamera-Strahl -> getWorldPoint() waere immer (0,0).
+    // Darum Scene-Graph-Listener mit eigenem Hit-Test, der jeden Punkt der Szene trifft.
+    ptr->onPointerHitTest = [](PointerEvent* e, Vec3* hit) {
+        Vec2 w = e->getWorldPoint();   // der Strahl ist hier bereits gesetzt
+        if (hit) *hit = Vec3(w.x, w.y, 0.f);
+        return true;
+    };
+    _eventDispatcher->addEventListenerWithSceneGraphPriority(ptr, this);
 
     scheduleUpdate();
     return true;
