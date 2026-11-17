@@ -11,7 +11,8 @@ constexpr float kStep    = 1.f / 60.f / 3.f;     // 3 Substeps pro Frame wie im 
 constexpr float kBallR   = 20.f / kPPM;
 constexpr int   kLevels  = 14;
 constexpr float kWallR   = 2.5f / kPPM;          // Wanddicke 5 px (Kapseln statt duenner Segmente -> kein Durchtunneln)
-constexpr float kInner   = 200.f / kPPM - kWallR;  // Innenkante des Rahmens
+constexpr float kFrame   = 200.f / kPPM;          // Mitte der Rahmenwand
+constexpr float kInner   = kFrame - kWallR;       // Innenkante des Rahmens
 constexpr float kMaxW    = 8.f;                 // max. Winkelgeschwindigkeit des Kastens (rad/s)
 constexpr float kPartR   = 6.f / kPPM;
 constexpr int   kFluidWin = 4;                  // Partikel im Ziel zum Gewinnen
@@ -870,8 +871,11 @@ void BoxScene::enforceBounds()
 {
     auto fix = [&](b2BodyId id, float r) {
         b2Vec2 l = toV(b2Body_GetLocalPoint(_boxBody, b2Body_GetPosition(id)));
+        // Nur eingreifen, wenn der Koerper wirklich ueber die Rahmenmitte hinaus ist (= ausgebrochen). Frueher wurde schon bei
+        // jeder kleinen Eindringtiefe am Rand zurueckgesetzt und die Geschwindigkeit auf die des Kastens gesetzt - das hat
+        // Ball und Schleim am Rand "kleben" lassen, an den inneren Waenden aber nicht.
         const float lim = kInner - r;
-        if (std::abs(l.x) <= lim && std::abs(l.y) <= lim) return;
+        if (std::abs(l.x) <= kFrame && std::abs(l.y) <= kFrame) return;
         b2Vec2 cl{std::max(-lim, std::min(lim, l.x)), std::max(-lim, std::min(lim, l.y))};
         b2Vec2 w = toV(b2Body_GetWorldPoint(_boxBody, cl));
         b2Body_SetTransform(id, {w.x, w.y}, b2Body_GetRotation(id));
