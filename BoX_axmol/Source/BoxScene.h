@@ -1,6 +1,6 @@
 #pragma once
 // BoX - Port von PureBasic (Chipmunk) nach Axmol, Physik jetzt Box2D 3.x. Gezeichnet wird ausschliesslich mit ax::DrawNode.
-#include "axmol.h"
+#include "axmol/axmol.h"
 #include "box2d/box2d.h"
 #include <vector>
 
@@ -15,8 +15,10 @@ public:
 private:
     void buildWorld(int level);
     void startLevel(int level);
-    void draw();
+    void drawAll();
     void drawMenu();
+    void drawNumber(int n, ax::Vec2 pos, float size);
+    void enforceBounds();
     void startGame();
     void stepFluid();
     void drawMetaballs();

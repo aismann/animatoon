@@ -7,7 +7,10 @@ constexpr float kWin     = 640.f;
 constexpr float kPPM     = 100.f;                // Pixel pro Meter (Box2D rechnet in Metern)
 constexpr float kStep    = 1.f / 60.f / 3.f;     // 3 Substeps pro Frame wie im Original
 constexpr float kBallR   = 20.f / kPPM;
-constexpr int   kLevels  = 4;
+constexpr int   kLevels  = 14;
+constexpr float kWallR   = 3.f / kPPM;          // Wanddicke (Kapseln statt duenner Segmente -> kein Durchtunneln)
+constexpr float kInner   = 200.f / kPPM - kWallR;  // Innenkante des Rahmens
+constexpr float kMaxW    = 8.f;                 // max. Winkelgeschwindigkeit des Kastens (rad/s)
 constexpr float kPartR   = 6.f / kPPM;
 constexpr int   kFluidWin = 8;                  // Partikel im Ziel zum Gewinnen
 constexpr float kWinDist = 23.f / kPPM;
@@ -124,8 +127,8 @@ void BoxScene::buildWorld(int level)
     sd.material.restitution   = 0.f;
 
     auto seg = [&](b2Vec2 a, b2Vec2 b) {
-        b2Segment s{a, b};
-        b2CreateSegmentShape(_boxBody, &sd, &s);
+        b2Capsule s{a, b, kWallR};
+        b2CreateCapsuleShape(_boxBody, &sd, &s);
         _segs.push_back({a, b});
     };
 
@@ -137,17 +140,20 @@ void BoxScene::buildWorld(int level)
     float goalX = 0, goalY = 0, goalR = 16;
     auto line = [&](float x1, float y1, float x2, float y2) { seg(V(x1, y1), V(x2, y2)); };
 
-    if (level == 1)
+    auto hline = [&](float y, float x1, float x2) { line(x1, y, x2, y); };
+    auto vline = [&](float x, float y1, float y2) { line(x, y1, x, y2); };
+
+    switch (level)
     {
+    case 1:
         goalX = 175; goalY = 175;
         for (int n = 0; n <= 3; ++n)
         {
             line(-200, -100 + n * 100, 100, -100 + n * 100);
             line(-100, -150 + n * 100, 200, -150 + n * 100);
         }
-    }
-    else if (level == 2)
-    {
+        break;
+    case 2:
         line(-150, -150, 200, -150);
         line(-150, -150, -150, 150);
         line(150, 150, -150, 150);
@@ -155,8 +161,70 @@ void BoxScene::buildWorld(int level)
         line(150, -100, -100, -100);
         line(-100, -100, -100, 100);
         line(-100, 100, 50, 100);
+        break;
+    case 3:
+    case 4:   // laut Vorlage: nur Rahmen + Ziel in der Mitte
+        break;
+
+    // ---- neue Levels 5-14 (Start: Ball/Fluid oben rechts, Streifen y < -150 bleibt frei) ----
+    case 5:   // Zickzack
+        hline(-100, -200, 110); hline(0, -110, 200); hline(100, -200, 110);
+        goalX = 160; goalY = 165;
+        break;
+    case 6:   // Trichter
+        line(-200, -100, -50, 0); line(200, -100, 50, 0);
+        line(-200, 60, -30, 120); line(200, 60, 30, 120);
+        goalX = 0; goalY = 170;
+        break;
+    case 7:   // Pegs
+        for (int r = 0; r < 4; ++r)
+            for (int k = 0; k < 4; ++k)
+            {
+                float x = -150 + k * 100 + (r % 2) * 50, y = -90 + r * 60;
+                hline(y, x - 20, x + 20);
+            }
+        goalX = -170; goalY = 170;
+        break;
+    case 8:   // Trennwand
+        vline(0, -150, 120);
+        hline(-60, -200, -70);
+        goalX = -150; goalY = -110;
+        break;
+    case 9:   // S-Waende
+        vline(80, -50, 200); vline(-80, -150, 100);
+        goalX = -150; goalY = 150;
+        break;
+    case 10:  // Tresor: Ziel in kleinem Kasten mit Oeffnung rechts
+        hline(-60, -60, 60); hline(60, -60, 60); vline(-60, -60, 60);
+        vline(60, -60, -30); vline(60, 30, 60);
+        goalX = 0; goalY = 0;
+        break;
+    case 11:  // Tunnel: 4 Regale, Luecken wechseln
+        hline(-110, -200, 140); hline(-45, -140, 200); hline(20, -200, 140); hline(85, -140, 200);
+        goalX = -160; goalY = 165;
+        break;
+    case 12:  // Ring: Achteck mit Luecke rechts unten, Ziel in der Mitte
+        {
+            const float Rr = 100.f, k = 3.14159265f / 4.f;
+            for (int i = 0; i < 8; ++i)
+            {
+                if (i == 7) continue;   // Luecke
+                float a0 = k * (i + 0.5f), a1 = k * (i + 1.5f);
+                line(Rr * cosf(a0), Rr * sinf(a0), Rr * cosf(a1), Rr * sinf(a1));
+            }
+        }
+        goalX = 0; goalY = 0;
+        break;
+    case 13:  // Slalom
+        vline(120, -150, 100); vline(40, -100, 200); vline(-40, -150, 100); vline(-120, -100, 200);
+        goalX = -160; goalY = 0;
+        break;
+    case 14:  // Finale: Regale + Tresor unten rechts
+        hline(-100, -200, 110); hline(0, -110, 200);
+        hline(100, 100, 200); vline(100, 100, 140);
+        goalX = 160; goalY = 160;
+        break;
     }
-    // Level 3 und 4: nur Rahmen + Ziel in der Mitte
 
     // Ziel: Sensor-Kreis
     _goalLocal         = V(goalX, goalY);
@@ -171,6 +239,7 @@ void BoxScene::buildWorld(int level)
         // Ball (Original: Startposition 500/150 im Fenster, y nach unten)
         b2BodyDef ballDef = b2DefaultBodyDef();
         ballDef.type      = b2_dynamicBody;
+        ballDef.isBullet  = true;
         ballDef.position  = {500.f / kPPM, (kWin - 150.f) / kPPM};
         _ball             = b2CreateBody(_world, &ballDef);
         b2ShapeDef bs     = sd;
@@ -192,6 +261,7 @@ void BoxScene::buildWorld(int level)
                 b2Vec2 l          = V(190.f - c * 12.5f, -188.f + r * 14.f);
                 b2BodyDef pd      = b2DefaultBodyDef();
                 pd.type           = b2_dynamicBody;
+                pd.isBullet       = true;
                 pd.linearDamping  = 0.05f;
                 pd.position       = {320.f / kPPM + l.x, 320.f / kPPM + l.y};
                 b2BodyId id       = b2CreateBody(_world, &pd);
@@ -267,17 +337,22 @@ void BoxScene::update(float dt)
             else _finished = true;
         }
         if (_finished && (_finishTimer += dt) > 3.f) _state = State::Menu;
-        draw();
+        drawAll();
         return;
     }
 
     _elapsed += dt;
     if (_left)  _w += 0.2f;
     if (_right) _w -= 0.2f;   // y-Achse gespiegelt: rechts = im Uhrzeigersinn = negativ
+    _w = std::max(-kMaxW, std::min(kMaxW, _w));
     b2Body_SetAngularVelocity(_boxBody, _w);
 
     if (_mode == Mode::Fluid) stepFluid();
-    for (int i = 0; i < 3; ++i) b2World_Step(_world, kStep, 4);
+    for (int i = 0; i < 3; ++i)
+    {
+        b2World_Step(_world, kStep, 4);
+        enforceBounds();
+    }
 
     b2Vec2 g = toV(b2Body_GetWorldPoint(_boxBody, _goalLocal));
     if (_mode == Mode::Ball)
@@ -289,10 +364,10 @@ void BoxScene::update(float dt)
     else if (countParticlesInGoal() >= kFluidWin)
         _won = true;
 
-    draw();
+    drawAll();
 }
 
-void BoxScene::draw()
+void BoxScene::drawAll()
 {
     _draw->clear();
 
@@ -339,13 +414,13 @@ void BoxScene::draw()
     // Zeit als 7-Segment (statt Label, da nur DrawNode erlaubt)
     drawTime((long)(_elapsed * 1000.0), Vec2(10, kWin - 40));
 
-    // Level-Anzeige: Ziffer + Punkte fuer alle Levels (gefuellt = erreicht)
-    drawDigit(_level, Vec2(kWin - 30, kWin - 40), 8.f);
+    // Level-Anzeige: Zahl + Punkte fuer alle Levels (gefuellt = erreicht)
+    drawNumber(_level, Vec2(kWin - 40, kWin - 40), 8.f);
     for (int i = 1; i <= kLevels; ++i)
     {
-        Vec2 d(kWin - 100 + i * 14, kWin - 50);
-        if (i <= _level) _draw->drawDot(d, 4.f, _finished ? kBlue : kBlack);
-        else _draw->drawCircle(d, 4.f, kBlack, 1.f);
+        Vec2 d(kWin - 235 + i * 12, kWin - 50);
+        if (i <= _level) _draw->drawDot(d, 3.f, _finished ? kBlue : kBlack);
+        else _draw->drawCircle(d, 3.f, kBlack, 1.f);
     }
 }
 
@@ -419,13 +494,15 @@ void BoxScene::drawMenu()
         drawDigit(m + 1, Vec2(px0 - 8, 215), 8.f);
     }
 
-    // Start-Level (Hoch/Runter): Ziffern 1-4, aktuelles gefuellt markiert
+    // Start-Level (Hoch/Runter): Zahl zwischen zwei Pfeilen + Punkte fuer alle Levels
+    drawNumber(_menuLevel, Vec2(cx - (_menuLevel >= 10 ? 16.f : 8.f), 100), 8.f);
+    _draw->drawSolidTriangle(Vec2(cx - 8, 140), Vec2(cx + 8, 140), Vec2(cx, 154), kBlack, kBlack, 1.f);
+    _draw->drawSolidTriangle(Vec2(cx - 8, 90), Vec2(cx + 8, 90), Vec2(cx, 76), kBlack, kBlack, 1.f);
     for (int i = 1; i <= kLevels; ++i)
     {
-        float x = cx - 90 + (i - 1) * 60.f;
-        drawDigit(i, Vec2(x - 8, 110), 8.f);
-        if (i == _menuLevel) _draw->drawDot(Vec2(x, 85), 5.f, kBlue);
-        else _draw->drawCircle(Vec2(x, 85), 5.f, kBlack, 1.f);
+        Vec2 d(cx - 7 * kLevels + i * 14 - 7, 55);
+        if (i == _menuLevel) _draw->drawDot(d, 4.f, kBlue);
+        else _draw->drawCircle(d, 3.f, kBlack, 1.f);
     }
 }
 
@@ -489,4 +566,27 @@ void BoxScene::drawMetaballs()
             for (int i = 0; i + 1 < nc; i += 2)
                 _draw->drawLine(cross[i], cross[i + 1], edge, 1.5f, DrawNode::EndStyle::Butt, DrawNode::EndStyle::Butt);
         }
+}
+
+// Sicherheitsnetz: Ball/Partikel duerfen den Kasten nie verlassen. Liegt ein Koerper ausserhalb des Rahmens
+// (z.B. durch extreme Drehung), wird er in Container-Koordinaten zurueck in den Kasten gesetzt.
+void BoxScene::enforceBounds()
+{
+    auto fix = [&](b2BodyId id, float r) {
+        b2Vec2 l = toV(b2Body_GetLocalPoint(_boxBody, b2Body_GetPosition(id)));
+        const float lim = kInner - r;
+        if (std::abs(l.x) <= lim && std::abs(l.y) <= lim) return;
+        b2Vec2 cl{std::max(-lim, std::min(lim, l.x)), std::max(-lim, std::min(lim, l.y))};
+        b2Vec2 w = toV(b2Body_GetWorldPoint(_boxBody, cl));
+        b2Body_SetTransform(id, {w.x, w.y}, b2Body_GetRotation(id));
+        b2Body_SetLinearVelocity(id, b2Body_GetWorldPointVelocity(_boxBody, {w.x, w.y}));
+    };
+    if (B2_IS_NON_NULL(_ball)) fix(_ball, kBallR);
+    for (b2BodyId id : _parts) fix(id, kPartR);
+}
+
+void BoxScene::drawNumber(int n, Vec2 pos, float size)
+{
+    std::string s = std::to_string(n);
+    for (char ch : s) { drawDigit(ch - '0', pos, size); pos.x += size + 8; }
 }
