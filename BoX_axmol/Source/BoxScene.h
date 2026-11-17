@@ -2,6 +2,7 @@
 // BoX - Port von PureBasic (Chipmunk) nach Axmol, Physik jetzt Box2D 3.x. Gezeichnet wird ausschliesslich mit ax::DrawNode.
 #include "axmol/axmol.h"
 #include "box2d/box2d.h"
+#include <array>
 #include <vector>
 
 class BoxScene : public ax::Scene
@@ -32,7 +33,18 @@ private:
     void drawDigit(int digit, ax::Vec2 pos, float size);
     void drawTime(long ms, ax::Vec2 pos);
 
-    enum class State { Menu, Play };
+    enum class State { Menu, Play, Editor };
+
+    // Level: Ziel + innere Waende in Pixeln relativ zur Kastenmitte (y nach unten wie im Original)
+    struct LevelData { float gx = 0, gy = 0; std::vector<std::array<float, 4>> segs; };
+    static LevelData builtinLevel(int level);
+    void loadLevels();
+    void saveLevels() const;
+    void startEditor();
+    void drawEditor();
+    void editorPointer(int phase, ax::Vec2 world, int button);   // 0 = down, 1 = move, 2 = up
+    void editorKey(int key);
+    ax::Vec2 toLocal(ax::Vec2 screen) const;
     enum class Mode { Ball, Fluid };
 
     struct Seg { b2Vec2 a, b; };   // lokale Container-Koordinaten (Meter)
@@ -48,6 +60,14 @@ private:
     bool _finished = false;   // alle Levels geschafft
     std::vector<Seg> _segs;
     std::vector<b2BodyId> _parts;   // Fluid-Partikel
+
+    std::vector<LevelData> _levels;   // Index 1..kLevels (eingebaut, ueberschrieben durch gespeicherte Editor-Levels)
+    bool _editorOn   = false;         // Schalter im Menue
+    bool _fromEditor = false;         // Testspiel aus dem Editor
+    int _tool        = 0;             // 0 = Wand, 1 = Ziel, 2 = Radierer
+    bool _drag       = false;
+    ax::Vec2 _dragA, _dragB, _cursor; // lokale Editor-Koordinaten
+    float _swAnim    = 0.f;           // Animation des Menue-Schalters 0..1
 
     State _state   = State::Menu;
     Mode _mode     = Mode::Ball;    // im Menue gewaehlt

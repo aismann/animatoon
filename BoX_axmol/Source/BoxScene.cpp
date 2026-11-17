@@ -1,5 +1,6 @@
 #include "BoxScene.h"
 #include "MetaballMesh.h"
+#include <sstream>
 using namespace ax;
 
 namespace
@@ -50,6 +51,10 @@ bool BoxScene::init()
     _draw = DrawNode::create();
     addChild(_draw);
 
+    _levels.resize(kLevels + 1);
+    for (int i = 1; i <= kLevels; ++i) _levels[i] = builtinLevel(i);
+    loadLevels();   // gespeicherte Editor-Levels ueberschreiben die eingebauten
+
     auto kb = KeyboardEventListener::create();
     kb->onKeyPressed = [this](KeyboardEvent* e) {
         using K = KeyboardEvent::KeyCode;
@@ -64,20 +69,29 @@ bool BoxScene::init()
             case K::KEY_2: _mode = Mode::Fluid; break;
             case K::KEY_UP_ARROW:   _menuLevel = _menuLevel % kLevels + 1; break;
             case K::KEY_DOWN_ARROW: _menuLevel = (_menuLevel + kLevels - 2) % kLevels + 1; break;
+            case K::KEY_E: _editorOn = !_editorOn; break;   // Editor-Schalter
             case K::KEY_ENTER:
             case K::KEY_KP_ENTER:
             case K::KEY_RETURN:
-            case K::KEY_SPACE: startGame(); break;
+            case K::KEY_SPACE:
+                if (_editorOn) startEditor();
+                else startGame();
+                break;
             case K::KEY_ESCAPE: Director::getInstance()->end(); break;
             default: break;
             }
+            return;
+        }
+        if (_state == State::Editor)
+        {
+            editorKey((int)k);
             return;
         }
         switch (k)
         {
         case K::KEY_LEFT_ARROW:  _left = true; break;
         case K::KEY_RIGHT_ARROW: _right = true; break;
-        case K::KEY_ESCAPE:      _state = State::Menu; break;   // zurueck ins Menue
+        case K::KEY_ESCAPE:      _state = _fromEditor ? State::Editor : State::Menu; break;   // zurueck
         default: break;
         }
     };
@@ -87,60 +101,32 @@ bool BoxScene::init()
     };
     _eventDispatcher->addEventListenerWithSceneGraphPriority(kb, this);
 
+    // Maus/Touch: Editor (Waende ziehen, Ziel setzen, radieren) und Klicks im Menue
+    auto ptr = PointerEventListener::create();
+    ptr->onPointerDown = [this](PointerEvent* e) {
+        Vec2 p = e->getWorldPoint();
+        if (_state == State::Editor) { editorPointer(0, p, e->getButton()); return true; }
+        if (_state == State::Menu)
+        {
+            if (p.x > 520 && p.x < 600 && p.y > 85 && p.y < 125) _editorOn = !_editorOn;   // Schalter
+            else if (p.y > 200 && p.y < 440 && p.x < 280) _mode = Mode::Ball;                // Karten
+            else if (p.y > 200 && p.y < 440 && p.x > 360) _mode = Mode::Fluid;
+        }
+        return true;
+    };
+    ptr->onPointerMove = [this](PointerEvent* e) { if (_state == State::Editor) editorPointer(1, e->getWorldPoint(), 0); };
+    ptr->onPointerUp   = [this](PointerEvent* e) { if (_state == State::Editor) editorPointer(2, e->getWorldPoint(), 0); };
+    _eventDispatcher->addEventListenerWithFixedPriority(ptr, 1);
+
     scheduleUpdate();
     return true;
 }
 
-void BoxScene::startLevel(int level)
+BoxScene::LevelData BoxScene::builtinLevel(int level)
 {
-    if (B2_IS_NON_NULL(_world)) b2DestroyWorld(_world);
-    _segs.clear();
-    _parts.clear();
-    _ball = b2_nullBodyId;
-    _level = level; _won = false; _w = 0.f; _winTimer = 0.f; _elapsed = 0.0;
-    buildWorld(level);
-}
-
-void BoxScene::startGame()
-{
-    _left = _right = false;
-    _finished = false;
-    _finishTimer = 0.f;
-    _state = State::Play;
-    startLevel(_menuLevel);
-}
-
-void BoxScene::buildWorld(int level)
-{
-    b2WorldDef wd = b2DefaultWorldDef();
-    wd.gravity    = {0.f, -2600.f / kPPM};
-    _world        = b2CreateWorld(&wd);
-
-    // Container: kinematischer Body, dreht sich um die Fenstermitte
-    b2BodyDef bd = b2DefaultBodyDef();
-    bd.type      = b2_kinematicBody;
-    bd.position  = {320.f / kPPM, 320.f / kPPM};
-    _boxBody     = b2CreateBody(_world, &bd);
-
-    // Box2D mischt Restitution mit max(), Chipmunk multiplizierte (1*0 = 0) -> hier 0 fuer gleiches Verhalten.
-    b2ShapeDef sd             = b2DefaultShapeDef();
-    sd.material.friction      = 1.f;
-    sd.material.restitution   = 0.f;
-
-    auto seg = [&](b2Vec2 a, b2Vec2 b) {
-        b2Capsule s{a, b, kWallR};
-        b2CreateCapsuleShape(_boxBody, &sd, &s);
-        _segs.push_back({a, b});
-    };
-
-    // Aussenrahmen
-    b2Vec2 A = V(-200, -200), B = V(-200, 200), C = V(200, 200), D = V(200, -200);
-    seg(A, B); seg(B, C); seg(C, D); seg(D, A);
-
-    // Level-Daten (Pixel, y nach unten wie im Original): Ziel + innere Waende
-    float goalX = 0, goalY = 0, goalR = 16;
-    auto line = [&](float x1, float y1, float x2, float y2) { seg(V(x1, y1), V(x2, y2)); };
-
+    LevelData L;
+    float goalX = 0, goalY = 0;
+    auto line  = [&](float x1, float y1, float x2, float y2) { L.segs.push_back({x1, y1, x2, y2}); };
     auto hline = [&](float y, float x1, float x2) { line(x1, y, x2, y); };
     auto vline = [&](float x, float y1, float y2) { line(x, y1, x, y2); };
 
@@ -226,6 +212,63 @@ void BoxScene::buildWorld(int level)
         goalX = 160; goalY = 160;
         break;
     }
+
+    L.gx = goalX;
+    L.gy = goalY;
+    return L;
+}
+
+void BoxScene::startLevel(int level)
+{
+    if (B2_IS_NON_NULL(_world)) b2DestroyWorld(_world);
+    _segs.clear();
+    _parts.clear();
+    _ball = b2_nullBodyId;
+    _level = level; _won = false; _w = 0.f; _winTimer = 0.f; _elapsed = 0.0;
+    buildWorld(level);
+}
+
+void BoxScene::startGame()
+{
+    _left = _right = false;
+    _finished = false;
+    _fromEditor = false;
+    _finishTimer = 0.f;
+    _state = State::Play;
+    startLevel(_menuLevel);
+}
+
+void BoxScene::buildWorld(int level)
+{
+    b2WorldDef wd = b2DefaultWorldDef();
+    wd.gravity    = {0.f, -2600.f / kPPM};
+    _world        = b2CreateWorld(&wd);
+
+    // Container: kinematischer Body, dreht sich um die Fenstermitte
+    b2BodyDef bd = b2DefaultBodyDef();
+    bd.type      = b2_kinematicBody;
+    bd.position  = {320.f / kPPM, 320.f / kPPM};
+    _boxBody     = b2CreateBody(_world, &bd);
+
+    // Box2D mischt Restitution mit max(), Chipmunk multiplizierte (1*0 = 0) -> hier 0 fuer gleiches Verhalten.
+    b2ShapeDef sd             = b2DefaultShapeDef();
+    sd.material.friction      = 1.f;
+    sd.material.restitution   = 0.f;
+
+    auto seg = [&](b2Vec2 a, b2Vec2 b) {
+        b2Capsule s{a, b, kWallR};
+        b2CreateCapsuleShape(_boxBody, &sd, &s);
+        _segs.push_back({a, b});
+    };
+
+    // Aussenrahmen
+    b2Vec2 A = V(-200, -200), B = V(-200, 200), C = V(200, 200), D = V(200, -200);
+    seg(A, B); seg(B, C); seg(C, D); seg(D, A);
+
+    // Level-Daten (Pixel, y nach unten wie im Original): Ziel + innere Waende
+    const LevelData& L = _levels[level];
+    const float goalX = L.gx, goalY = L.gy, goalR = 16;
+    for (const auto& s : L.segs) seg(V(s[0], s[1]), V(s[2], s[3]));
 
     // Ziel: Sensor-Kreis
     _goalLocal         = V(goalX, goalY);
@@ -322,9 +365,15 @@ int BoxScene::countParticlesInGoal() const
 
 void BoxScene::update(float dt)
 {
+    if (_state == State::Editor)
+    {
+        drawEditor();
+        return;
+    }
     if (_state == State::Menu)
     {
         _menuT += dt;
+        _swAnim += ((_editorOn ? 1.f : 0.f) - _swAnim) * std::min(1.f, dt * 12.f);
         _won = false;
         drawMenu();
         return;
@@ -332,6 +381,11 @@ void BoxScene::update(float dt)
     if (_won)
     {
         _winTimer += dt;
+        if (_fromEditor && _winTimer > 1.5f)
+        {
+            _state = State::Editor;   // Testspiel gewonnen -> zurueck in den Editor
+            return;
+        }
         if (_winTimer > 1.5f && !_finished)
         {
             if (_level < kLevels) startLevel(_level + 1);
@@ -602,6 +656,23 @@ void BoxScene::drawMenu()
         if (i == _menuLevel) _draw->drawDot(d, 4.f, Color(0.15f, 0.45f, 1.f, 1.f));
         else _draw->drawCircle(d, 3.f, ink, 1.f);
     }
+
+    // Editor-Schalter (E oder Klick): aus = grau, an = orange. Enter startet dann den Editor statt des Spiels.
+    {
+        const Color orange(1.f, 0.6f, 0.1f, 1.f), off(0.62f, 0.68f, 0.80f, 1.f);
+        Vec2 c(560.f, 105.f);
+        // Stift-Symbol ueber dem Schalter
+        Color pc = _editorOn ? orange : off;
+        _draw->drawLine(Vec2(c.x - 12, c.y + 28), Vec2(c.x + 10, c.y + 50), pc, 6.f);
+        _draw->drawSolidTriangle(Vec2(c.x - 12, c.y + 28), Vec2(c.x - 18, c.y + 22), Vec2(c.x - 6, c.y + 24), ink, ink, 1.f);
+        roundedRect(c, Vec2(32.f, 16.f), 16.f,
+                    Color(off.r + (orange.r - off.r) * _swAnim, off.g + (orange.g - off.g) * _swAnim,
+                          off.b + (orange.b - off.b) * _swAnim, 1.f),
+                    ink, 2.f);
+        float kx = c.x - 16.f + 32.f * _swAnim;
+        _draw->drawDot(Vec2(kx, c.y), 12.f, Color(1.f, 1.f, 1.f, 1.f));
+        _draw->drawCircle(Vec2(kx, c.y), 12.f, ink, 1.5f);
+    }
 }
 
 // Metaballs nur mit DrawNode: Skalarfelder aus Kernen auf einem Raster, Iso-Konturen per Marching Squares.
@@ -687,4 +758,213 @@ void BoxScene::drawNumber(int n, Vec2 pos, float size)
 {
     std::string s = std::to_string(n);
     for (char ch : s) { drawDigit(ch - '0', pos, size); pos.x += size + 8; }
+}
+
+// ------------------------------------------------------------------------------------------------
+// Level-Editor (nur DrawNode). Koordinaten: lokal zum Kasten (Pixel, y nach unten wie im Original),
+// Raster 10 px. Werkzeuge: 1 Wand ziehen, 2 Ziel setzen, 3 Radierer (auch: rechte Maustaste = loeschen).
+// Z = letzte Wand zurueck, Entf/Backspace = alles loeschen, R = Original-Level, T / Enter = testen,
+// S = speichern, Esc = speichern + zurueck ins Menue.
+// ------------------------------------------------------------------------------------------------
+namespace
+{
+std::string levelsPath()
+{
+    return FileUtils::getInstance()->getWritablePath() + "box_levels.txt";
+}
+
+float distToSeg(float px_, float py_, const std::array<float, 4>& s)
+{
+    float dx = s[2] - s[0], dy = s[3] - s[1];
+    float l2 = dx * dx + dy * dy;
+    float t  = l2 > 0.f ? std::max(0.f, std::min(1.f, ((px_ - s[0]) * dx + (py_ - s[1]) * dy) / l2)) : 0.f;
+    float qx = s[0] + t * dx - px_, qy = s[1] + t * dy - py_;
+    return std::sqrt(qx * qx + qy * qy);
+}
+}  // namespace
+
+Vec2 BoxScene::toLocal(Vec2 s) const
+{
+    auto snap = [](float v) { return std::max(-200.f, std::min(200.f, std::round(v / 10.f) * 10.f)); };
+    return Vec2(snap(s.x - 320.f), snap(320.f - s.y));   // Bildschirm y nach oben -> Level y nach unten
+}
+
+void BoxScene::loadLevels()
+{
+    auto* fu = FileUtils::getInstance();
+    std::string path = levelsPath();
+    if (!fu->isFileExist(path)) return;
+    std::istringstream in(fu->getStringFromFile(path));
+    std::string tag;
+    while (in >> tag)
+    {
+        int n = 0, count = 0;
+        LevelData L;
+        if (tag != "L" || !(in >> n >> L.gx >> L.gy >> count) || n < 1 || n >= (int)_levels.size() || count < 0 || count > 500)
+            return;   // beschaedigte Datei: eingebaute Levels behalten
+        for (int i = 0; i < count; ++i)
+        {
+            std::array<float, 4> s{};
+            if (!(in >> s[0] >> s[1] >> s[2] >> s[3])) return;
+            L.segs.push_back(s);
+        }
+        _levels[n] = std::move(L);
+    }
+}
+
+void BoxScene::saveLevels() const
+{
+    std::ostringstream out;
+    for (int i = 1; i < (int)_levels.size(); ++i)
+    {
+        const LevelData& L = _levels[i];
+        out << "L " << i << ' ' << L.gx << ' ' << L.gy << ' ' << L.segs.size() << '\n';
+        for (const auto& s : L.segs) out << s[0] << ' ' << s[1] << ' ' << s[2] << ' ' << s[3] << '\n';
+    }
+    FileUtils::getInstance()->writeStringToFile(out.str(), levelsPath());
+}
+
+void BoxScene::startEditor()
+{
+    _state      = State::Editor;
+    _fromEditor = false;
+    _level      = _menuLevel;
+    _tool       = 0;
+    _drag       = false;
+    _left = _right = false;
+}
+
+void BoxScene::editorPointer(int phase, Vec2 world, int button)
+{
+    LevelData& L = _levels[_level];
+    Vec2 p       = toLocal(world);
+    _cursor      = p;
+
+    auto eraseAt = [&](Vec2 at) {
+        int best = -1;
+        float bd = 14.f;
+        for (int i = 0; i < (int)L.segs.size(); ++i)
+        {
+            float d = distToSeg(at.x, at.y, L.segs[i]);
+            if (d < bd) { bd = d; best = i; }
+        }
+        if (best >= 0) { L.segs.erase(L.segs.begin() + best); saveLevels(); }
+    };
+
+    if (phase == 0)
+    {
+        if (button == InputButton::Right) { eraseAt(Vec2(world.x - 320.f, 320.f - world.y)); return; }
+        if (_tool == 0) { _drag = true; _dragA = _dragB = p; }
+        else if (_tool == 1) { L.gx = p.x; L.gy = p.y; saveLevels(); }
+        else eraseAt(Vec2(world.x - 320.f, 320.f - world.y));
+    }
+    else if (phase == 1)
+    {
+        if (_drag) _dragB = p;
+    }
+    else if (_drag)
+    {
+        _drag = false;
+        if (std::abs(_dragB.x - _dragA.x) + std::abs(_dragB.y - _dragA.y) >= 10.f)
+        {
+            L.segs.push_back({_dragA.x, _dragA.y, _dragB.x, _dragB.y});
+            saveLevels();
+        }
+    }
+}
+
+void BoxScene::editorKey(int key)
+{
+    using K = KeyboardEvent::KeyCode;
+    LevelData& L = _levels[_level];
+    switch ((K)key)
+    {
+    case K::KEY_1: _tool = 0; break;
+    case K::KEY_2: _tool = 1; break;
+    case K::KEY_3: _tool = 2; break;
+    case K::KEY_Z:
+        if (!L.segs.empty()) { L.segs.pop_back(); saveLevels(); }
+        break;
+    case K::KEY_DELETE:
+    case K::KEY_BACKSPACE: L.segs.clear(); saveLevels(); break;
+    case K::KEY_R: L = builtinLevel(_level); saveLevels(); break;
+    case K::KEY_S: saveLevels(); break;
+    case K::KEY_T:
+    case K::KEY_ENTER:
+    case K::KEY_KP_ENTER:
+    case K::KEY_RETURN:
+        saveLevels();
+        _fromEditor = true;
+        _finished   = false;
+        _state      = State::Play;
+        startLevel(_level);
+        break;
+    case K::KEY_UP_ARROW:   _level = _level % kLevels + 1; break;
+    case K::KEY_DOWN_ARROW: _level = (_level + kLevels - 2) % kLevels + 1; break;
+    case K::KEY_ESCAPE:
+        saveLevels();
+        _menuLevel = _level;
+        _state     = State::Menu;
+        break;
+    default: break;
+    }
+}
+
+void BoxScene::drawEditor()
+{
+    _draw->clear();
+    const Color ink(0.08f, 0.14f, 0.35f, 1.f), accent(0.15f, 0.45f, 1.f, 1.f), orange(1.f, 0.6f, 0.1f, 1.f);
+    auto S = [](float lx, float ly) { return Vec2(320.f + lx, 320.f - ly); };   // Level -> Bildschirm
+
+    fillRect(Vec2(0, 0), Vec2(kWin, kWin), Color(0.90f, 0.93f, 0.98f, 1.f));
+    fillRect(S(-200, 200), S(200, -200), Color(1.f, 1.f, 1.f, 1.f));
+
+    // Startbereich von Ball/Fluid: obere Leiste (Waende hier vermeiden)
+    fillRect(S(-200, -150), S(200, -200), Color(1.f, 0.9f, 0.85f, 1.f));
+    _draw->drawCircle(S(180, -170), 20.f, Color(0.9f, 0.5f, 0.3f, 1.f), 2.f);
+
+    for (int g = -200; g <= 200; g += 20)   // Raster
+    {
+        Color gc(0.80f, 0.85f, 0.93f, 1.f);
+        _draw->drawLine(S((float)g, -200), S((float)g, 200), gc, 1.f);
+        _draw->drawLine(S(-200, (float)g), S(200, (float)g), gc, 1.f);
+    }
+
+    const LevelData& L = _levels[_level];
+    const Vec2 q[4]    = {S(-200, -200), S(-200, 200), S(200, 200), S(200, -200)};
+    for (int i = 0; i < 4; ++i) _draw->drawLine(q[i], q[(i + 1) & 3], ink, 5.f);
+    for (const auto& s : L.segs) _draw->drawLine(S(s[0], s[1]), S(s[2], s[3]), ink, 5.f);
+
+    _draw->drawDot(S(L.gx, L.gy), 16.f, Color(0.2f, 0.75f, 0.35f, 0.45f));   // Ziel
+    _draw->drawCircle(S(L.gx, L.gy), 16.f, Color(0.1f, 0.5f, 0.2f, 1.f), 3.f);
+
+    if (_drag)   // Vorschau der gezogenen Wand
+    {
+        _draw->drawLine(S(_dragA.x, _dragA.y), S(_dragB.x, _dragB.y), accent, 5.f);
+        _draw->drawDot(S(_dragA.x, _dragA.y), 5.f, accent);
+        _draw->drawDot(S(_dragB.x, _dragB.y), 5.f, accent);
+    }
+    else
+        _draw->drawCircle(S(_cursor.x, _cursor.y), 6.f, _tool == 2 ? Color(0.9f, 0.2f, 0.2f, 1.f) : accent, 2.f);
+
+    // Werkzeugleiste: Wand / Ziel / Radierer (Ziffer darunter), aktives Werkzeug blau
+    for (int i = 0; i < 3; ++i)
+    {
+        Vec2 c(60.f + i * 70.f, 590.f);
+        roundedRect(c, Vec2(28.f, 28.f), 8.f, i == _tool ? Color(1.f, 1.f, 1.f, 1.f) : Color(0.85f, 0.89f, 0.96f, 1.f),
+                    i == _tool ? accent : Color(0.62f, 0.70f, 0.85f, 1.f), i == _tool ? 3.f : 1.f);
+        if (i == 0) _draw->drawLine(Vec2(c.x - 14, c.y - 10), Vec2(c.x + 14, c.y + 10), ink, 5.f);
+        else if (i == 1) _draw->drawCircle(c, 12.f, Color(0.1f, 0.5f, 0.2f, 1.f), 3.f);
+        else
+        {
+            _draw->drawLine(Vec2(c.x - 11, c.y - 11), Vec2(c.x + 11, c.y + 11), Color(0.9f, 0.2f, 0.2f, 1.f), 4.f);
+            _draw->drawLine(Vec2(c.x - 11, c.y + 11), Vec2(c.x + 11, c.y - 11), Color(0.9f, 0.2f, 0.2f, 1.f), 4.f);
+        }
+        drawDigit(i + 1, Vec2(c.x - 4.f, c.y - 56.f), 4.f);
+    }
+
+    // Level-Nummer (Hoch/Runter) + Editor-Kennzeichen (orange)
+    roundedRect(Vec2(kWin - 90.f, 590.f), Vec2(70.f, 28.f), 10.f, Color(1.f, 1.f, 1.f, 1.f), orange, 3.f);
+    drawNumber(_level, Vec2(kWin - 90.f - (_level >= 10 ? 12.f : 4.f), 580.f), 6.f);
+    _draw->drawLine(Vec2(kWin - 150.f, 580.f), Vec2(kWin - 130.f, 600.f), orange, 4.f);   // Stift
 }
