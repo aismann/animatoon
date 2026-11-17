@@ -543,9 +543,11 @@ void BoxScene::drawTime(long ms, Vec2 pos)
 
 namespace
 {
-// Wasser: Verlauf Rand -> Kern per Eckenfarben (drawColoredTriangle). Alpha steigt zum Kern: Rand durchsichtig, Kern dichter.
-const Color kWater[4] = {Color(0.03f, 0.14f, 0.52f, 0.28f), Color(0.07f, 0.30f, 0.85f, 0.40f),
-                         Color(0.18f, 0.52f, 1.00f, 0.52f), Color(0.42f, 0.74f, 1.00f, 0.66f)};
+// Schleim (grün, wie die Vorlage): Rand kraeftig und fast deckend, nach innen zunehmend durchsichtig,
+// dazu heller Glanz. Verlauf per Eckenfarben (drawColoredTriangle).
+const Color kWater[4] = {Color(0.33f, 0.62f, 0.03f, 0.95f), Color(0.50f, 0.82f, 0.06f, 0.80f),
+                         Color(0.58f, 0.90f, 0.12f, 0.55f), Color(0.64f, 0.93f, 0.20f, 0.38f)};
+const Color kSlimeSoft(0.86f, 1.00f, 0.55f, 0.55f), kSlimeCore(1.00f, 1.00f, 0.90f, 0.90f);
 }
 
 void BoxScene::fillRect(Vec2 lo, Vec2 hi, const Color& col)
@@ -682,7 +684,7 @@ void BoxScene::drawMenu()
         float ph = fmodf(t * 0.7f, 1.f);
         if (sel) pts.push_back({Vec2(c.x + 10.f, c.y + 46.f - ph * ph * 90.f), 0.55f + 0.2f * (1.f - ph)});
         MBPalette pal{{kWater[0], kWater[1], kWater[2], kWater[3]}, {0.28f, 0.45f, 0.80f, 1.35f},
-                      Color(0.75f, 0.90f, 1.f, 0.45f), Color(1.f, 1.f, 1.f, 0.8f), true};
+                      kSlimeSoft, kSlimeCore, true, 4.f, 1.5f, {0.f, 3.f, 7.f, 12.f}};
         renderMetaballs(pts, pal);
     }
 
@@ -779,7 +781,7 @@ void BoxScene::drawMetaballs()
     for (b2BodyId id : _parts)
         pts.push_back({px(toV(b2Body_GetPosition(id))), 1.f});
     MBPalette pal{{kWater[0], kWater[1], kWater[2], kWater[3]}, {0.28f, 0.45f, 0.80f, 1.35f},
-                  Color(0.75f, 0.90f, 1.f, 0.45f), Color(1.f, 1.f, 1.f, 0.8f), true};
+                  kSlimeSoft, kSlimeCore, true, 4.f, 1.5f, {0.f, 3.f, 7.f, 12.f}};
     renderMetaballs(pts, pal);
 }
 
