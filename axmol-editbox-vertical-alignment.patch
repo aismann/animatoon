@@ -344,3 +344,78 @@ index 319c5da..6c2669c 100644
  - (void)setText:(NSString*)text
  {
      self.textInput.axui_text = text;
+diff --git a/tests/cpp-tests/Source/UITest/CocoStudioGUITest/UIEditBoxTest.cpp b/tests/cpp-tests/Source/UITest/CocoStudioGUITest/UIEditBoxTest.cpp
+index 598be2c..67d1d59 100644
+--- a/tests/cpp-tests/Source/UITest/CocoStudioGUITest/UIEditBoxTest.cpp
++++ b/tests/cpp-tests/Source/UITest/CocoStudioGUITest/UIEditBoxTest.cpp
+@@ -35,6 +35,7 @@ UIEditBoxTests::UIEditBoxTests()
+     ADD_TEST_CASE(UIEditBoxTest);
+     ADD_TEST_CASE(UIEditBoxTestToggleVisibility);
+     ADD_TEST_CASE(UIEditBoxTestTextHorizontalAlignment);
++    ADD_TEST_CASE(UIEditBoxTestTextVerticalAlignment);
+     ADD_TEST_CASE(UIEditBoxTestPressedAndDisabled);
+ }
+ 
+@@ -338,6 +339,43 @@ bool UIEditBoxTestTextHorizontalAlignment::init()
+     return true;
+ }
+ 
++// UIEditBoxTestTextVerticalAlignment
++
++bool UIEditBoxTestTextVerticalAlignment::init()
++{
++    if (!UIScene::init())
++    {
++        return false;
++    }
++
++    const auto renderView    = Director::getInstance()->getRenderView();
++    const auto visibleOrigin = renderView->getVisibleOrigin();
++    const auto visibleSize   = renderView->getVisibleSize();
++    // tall boxes, so the vertical placement of the text is clearly visible
++    const auto editBoxSize = Size(visibleSize.width - 100, visibleSize.height * 0.2f);
++
++    const auto createEditBox = [this, editBoxSize, visibleOrigin, visibleSize](
++                                   std::string_view text, const TextVAlignment alignment, const int position_y) {
++        ui::EditBox* editbox = ui::EditBox::create(editBoxSize, ui::Scale9Sprite::create("extensions/green_edit.png"));
++        editbox->setPosition(Vec2(visibleOrigin.x + visibleSize.width / 2 - 50, (float)position_y));
++        editbox->setFontColor(Color32::red);
++        editbox->setPlaceHolder(text.data());
++        editbox->setPlaceholderFontColor(Color32::white);
++        editbox->setPlaceholderFontSize(24);
++        editbox->setFontSize(24);
++        editbox->setText(text.data());
++        editbox->setTextVerticalAlignment(alignment);
++        editbox->setReturnType(ui::EditBox::KeyboardReturnType::DONE);
++        addChild(editbox);
++    };
++
++    createEditBox("vertical top text", TextVAlignment::TOP, (int)(visibleOrigin.y + visibleSize.height * 3 / 4));
++    createEditBox("vertical center text", TextVAlignment::CENTER, (int)(visibleOrigin.y + visibleSize.height / 2));
++    createEditBox("vertical bottom text", TextVAlignment::BOTTOM, (int)(visibleOrigin.y + visibleSize.height / 4));
++
++    return true;
++}
++
+ // UIEditBoxTestPressedAndDisabled
+ bool UIEditBoxTestPressedAndDisabled::init()
+ {
+diff --git a/tests/cpp-tests/Source/UITest/CocoStudioGUITest/UIEditBoxTest.h b/tests/cpp-tests/Source/UITest/CocoStudioGUITest/UIEditBoxTest.h
+index 2f46a2b..9faf135 100644
+--- a/tests/cpp-tests/Source/UITest/CocoStudioGUITest/UIEditBoxTest.h
++++ b/tests/cpp-tests/Source/UITest/CocoStudioGUITest/UIEditBoxTest.h
+@@ -77,6 +77,14 @@ public:
+     virtual bool init() override;
+ };
+ 
++class UIEditBoxTestTextVerticalAlignment : public UIScene
++{
++public:
++    CREATE_FUNC(UIEditBoxTestTextVerticalAlignment);
++
++    virtual bool init() override;
++};
++
+ class UIEditBoxTestPressedAndDisabled : public UIScene
+ {
+ public:
