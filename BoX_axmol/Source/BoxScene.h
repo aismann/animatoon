@@ -19,9 +19,11 @@ private:
     void startLevel(int level);
     void drawAll();
     void drawBackground();   // blauer Verlauf (Menue + Spiel)
-    enum class Sfx { Click, Select, Start, HitSoft, HitHard, Splat, Win, Level, Pop, Erase, Goal, Count };
+    enum class Sfx { Click, Select, Start, HitSoft, HitHard, Win, Level, Pop, Erase, Goal, Count };
     void sfx(Sfx id, float volume = 1.f);               // spielt Content/sfx/<name>.wav (mit Mindestabstand)
     void drawSpeaker(ax::Vec2 c, bool on);
+    void updateSquish(float speed);   // Schleim in Bewegung: loopendes "Squosh" (Lautstaerke/Tonhoehe nach Tempo)
+    void stopSquish();
     void drawMenu();
     void drawNumber(int n, ax::Vec2 pos, float size);
     void enforceBounds();
@@ -76,6 +78,8 @@ private:
 
     bool _shineOn = true;                     // Schleim-Glanz an/aus (Schalter im Menue, Taste G)
     float _shAnim = 1.f;                      // Animation des Glanz-Schalters 0..1
+    ax::AudioId _squishId = ax::AudioEngine::INVALID_AUDIO_ID;
+    float _squishSm = 0.f;                    // geglaettetes Schleim-Tempo
     bool _sfxOn = true;                       // Ton an/aus (M oder Klick auf Lautsprecher)
     float _lastSfx[(int)Sfx::Count] = {};
 

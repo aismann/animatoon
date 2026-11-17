@@ -47,10 +47,10 @@ Schleim-Verlauf (gruen): `drawColoredTriangle` mit Eckenfarben. `mb::buildShaded
 (`InflatePaths` nach innen), Baender (`Difference`) und Delaunay-Dreiecke; jede Ecke kennt ihren Ring und bekommt dessen Farbe
 (`kWater[0..3]`, Alpha steigt zum Kern). Ring-Abstaende: `MBPalette::inset` (Standard 0 / 3,5 / 8 / 13 px).
 
-Sound: `Content/sfx/*.wav` (11 Effekte: click, select, start, hit_soft, hit_hard, splat, win, level, pop, erase, goal) nach
+Sound: `Content/sfx/*.wav` (11 Effekte: click, select, start, hit_soft, hit_hard, squosh (Loop), win, level, pop, erase, goal) nach
 `Content/` deines Projekts kopieren, sodass `sfx/click.wav` gefunden wird. Die WAVs sind synthetisch und werden mit
 `python3 tools/make_sfx.py Content/sfx` (numpy) erzeugt - einfach durch eigene Dateien gleichen Namens ersetzbar.
-Ausloeser: Menue (Auswahl/Klick/Start), Aufprall des Balls (leise/hart je nach Wucht), Schleim-Platschen, Ziel erreicht,
+Ausloeser: Menue (Auswahl/Klick/Start), Aufprall des Balls (leise/hart je nach Wucht), Schleim-Squosh (loopt, solange der Schleim sich bewegt; Lautstaerke + Tonhoehe nach Tempo, kein Aufprall-Sound), Ziel erreicht,
 Levelwechsel, Editor (Wand/Ziel setzen, loeschen). **M** oder Klick auf den Lautsprecher schaltet den Ton an/aus.
 Der Ball ist im Spiel wie im Menue schattiert gezeichnet (Licht oben links, Rollmarke dreht sich mit).
 

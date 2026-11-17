@@ -31,8 +31,22 @@ save("select", seq([tone(600, 620, 0.06, 0.5), tone(900, 920, 0.08, 0.5)]))
 save("start",  tone(280, 900, 0.22, 0.55, 0.01, 0.3))
 save("hit_soft", np.pad(noise(0.05, 0.25, 0.4), (0, int(SR * 0.09) - int(SR * 0.05))) + tone(220, 120, 0.09, 0.6))
 save("hit_hard", np.pad(noise(0.08, 0.5, 0.5), (0, int(SR * 0.16) - int(SR * 0.08))) + tone(150, 60, 0.16, 0.8, 0.002, 0.12))
-sp = tone(520, 110, 0.18, 0.55, 0.006, 0.12) + np.pad(noise(0.12, 0.3, 0.12), (0, int(SR * 0.18) - int(SR * 0.12)))
-save("splat", sp)
+# squosh: loopfaehiges nasses Schmatzen (gefiltertes Rauschen + Blubb-Chirps), Schleim in Bewegung
+def squosh(L=0.9, n_fade=0.04):
+    nf = int(SR * n_fade); total = int(SR * (L + n_fade)); x = np.arange(total) / SR
+    wob = 0.55 + 0.45 * np.sin(2 * np.pi * (x * (1 / L) * 3))            # 3 Zyklen pro Loop -> nahtlos
+    y = noise((L + n_fade), 0.55, 0.06)[:total]
+    y = y * np.pad(wob, (0, max(0, len(y) - len(wob))))[: len(y)] * 0.7
+    for k in range(7):                                                       # Blubb-Chirps
+        st = rng.uniform(0.0, L - 0.12); d = rng.uniform(0.05, 0.10)
+        f0, f1 = (rng.uniform(150, 260), rng.uniform(320, 520)) if k % 2 == 0 else (rng.uniform(380, 520), rng.uniform(130, 220))
+        c = tone(f0, f1, d, rng.uniform(0.18, 0.32), 0.01, d * 0.7); i0 = int(SR * st)
+        y[i0:i0 + len(c)] += c[: len(y) - i0]
+    out = y[: int(SR * L)].copy()
+    w = np.linspace(0, 1, nf)
+    out[:nf] = out[:nf] * w + y[int(SR * L): int(SR * L) + nf] * (1 - w)    # Crossfade Ende -> Anfang
+    return out
+save("squosh", squosh() * 3.2)   # Pegel anheben (Rohsignal ist leise)
 save("win",    seq([tone(f, f, 0.14, 0.5, 0.005, 0.2) for f in (523.25, 659.25, 783.99, 1046.5)], 0.02))
 save("level",  seq([tone(659.25, 659.25, 0.09, 0.5), tone(880, 880, 0.14, 0.5, 0.005, 0.2)], 0.01))
 save("pop",    tone(800, 500, 0.06, 0.55))

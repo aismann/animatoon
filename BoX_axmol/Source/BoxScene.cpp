@@ -41,6 +41,7 @@ BoxScene* BoxScene::create()
 
 BoxScene::~BoxScene()
 {
+    stopSquish();
     if (B2_IS_NON_NULL(_world)) b2DestroyWorld(_world);
 }
 
@@ -61,7 +62,7 @@ bool BoxScene::init()
     kb->onKeyPressed = [this](KeyboardEvent* e) {
         using K = KeyboardEvent::KeyCode;
         K k = e->getKeyCode();
-        if (k == K::KEY_M) { _sfxOn = !_sfxOn; sfx(Sfx::Click); return; }   // Ton an/aus
+        if (k == K::KEY_M) { _sfxOn = !_sfxOn; if (!_sfxOn) stopSquish(); sfx(Sfx::Click); return; }   // Ton an/aus
         if (k == K::KEY_G && _state != State::Editor) { _shineOn = !_shineOn; sfx(Sfx::Select); return; }   // Glanz an/aus
         if (_state == State::Menu)
         {
@@ -114,7 +115,7 @@ bool BoxScene::init()
         {
             auto begin = [this]() { if (_editorOn) startEditor(); else startGame(); };
             const float cx = kWin / 2;
-            if (p.x > 585 && p.x < 635 && p.y > 585 && p.y < 635) { _sfxOn = !_sfxOn; sfx(Sfx::Click); }   // Lautsprecher
+            if (p.x > 585 && p.x < 635 && p.y > 585 && p.y < 635) { _sfxOn = !_sfxOn; if (!_sfxOn) stopSquish(); sfx(Sfx::Click); }   // Lautsprecher
             else if (p.x > 30 && p.x < 130 && p.y > 85 && p.y < 160) { _shineOn = !_shineOn; sfx(Sfx::Select); }   // Glanz-Schalter
             else if (p.x > 520 && p.x < 600 && p.y > 85 && p.y < 135) { _editorOn = !_editorOn; sfx(Sfx::Select); }      // Editor-Schalter
             else if (p.y > 200 && p.y < 440 && p.x > 75 && p.x < 275) { _mode = Mode::Ball; begin(); }    // Karte: Ball -> Start
@@ -388,6 +389,7 @@ int BoxScene::countParticlesInGoal() const
 
 void BoxScene::update(float dt)
 {
+    if (_state != State::Play) stopSquish();
     if (_state == State::Editor)
     {
         _menuT += dt;
@@ -405,6 +407,7 @@ void BoxScene::update(float dt)
     }
     if (_won)
     {
+        stopSquish();
         _menuT += dt;
         _winTimer += dt;
         if (_fromEditor && _winTimer > 1.5f)
@@ -455,13 +458,14 @@ void BoxScene::update(float dt)
     }
     else
     {
-        int hits = 0;
-        for (size_t i = 0; i < _parts.size(); ++i)
+        // Kein Aufprall-Sound mehr fuer den Schleim: nur ein loopendes "Squosh", solange er sich bewegt
+        float sum = 0.f;
+        for (b2BodyId id : _parts)
         {
-            b2Vec2 d = b2Sub(b2Body_GetLinearVelocity(_parts[i]), partV0[i]);
-            if (d.x * d.x + d.y * d.y > 1.5f * 1.5f) ++hits;
+            b2Vec2 v = b2Body_GetLinearVelocity(id);
+            sum += std::sqrt(v.x * v.x + v.y * v.y);
         }
-        if (hits >= 2) sfx(Sfx::Splat, std::min(1.f, 0.35f + hits / 10.f));
+        updateSquish(_parts.empty() ? 0.f : sum / (float)_parts.size());
     }
 
     b2Vec2 g = toV(b2Body_GetWorldPoint(_boxBody, _goalLocal));
@@ -1172,9 +1176,9 @@ void BoxScene::drawEditor()
 void BoxScene::sfx(Sfx id, float volume)
 {
     if (!_sfxOn) return;
-    static const char* const names[(int)Sfx::Count] = {"click", "select", "start", "hit_soft", "hit_hard", "splat",
+    static const char* const names[(int)Sfx::Count] = {"click", "select", "start", "hit_soft", "hit_hard",
                                                        "win",   "level",  "pop",   "erase",    "goal"};
-    static const float minGap[(int)Sfx::Count]      = {0.03f, 0.03f, 0.10f, 0.08f, 0.08f, 0.12f,
+    static const float minGap[(int)Sfx::Count]      = {0.03f, 0.03f, 0.10f, 0.08f, 0.08f,
                                                        0.50f, 0.30f, 0.03f, 0.03f, 0.10f};
     const int i = (int)id;
     if (_menuT - _lastSfx[i] < minGap[i]) return;   // _menuT laeuft in allen Zustaenden (Menue, Spiel, Editor)
@@ -1204,4 +1208,35 @@ void BoxScene::drawSpeaker(Vec2 c, bool on)
         _draw->drawLine(Vec2(c.x + 9.f, c.y - 7.f), Vec2(c.x + 19.f, c.y + 7.f), red, 3.f);   // durchgestrichen
         _draw->drawLine(Vec2(c.x + 9.f, c.y + 7.f), Vec2(c.x + 19.f, c.y - 7.f), red, 3.f);
     }
+}
+
+// Loopendes Schleim-Geraeusch: startet ab einem Mindesttempo, Lautstaerke und Tonhoehe folgen dem (geglaetteten) Tempo,
+// Hysterese verhindert Flackern. Beim Stillstand (oder Ton aus / Menue / Editor / Sieg) wird es gestoppt.
+void BoxScene::updateSquish(float speed)
+{
+    if (!_sfxOn) { stopSquish(); return; }
+    _squishSm += (speed - _squishSm) * 0.2f;
+    const bool playing = _squishId != AudioEngine::INVALID_AUDIO_ID;
+    if (!playing && _squishSm > 0.30f)
+        _squishId = AudioEngine::play2d("sfx/squosh.wav", true, 0.f);
+    else if (playing && _squishSm < 0.12f)
+    {
+        stopSquish();
+        return;
+    }
+    if (_squishId != AudioEngine::INVALID_AUDIO_ID)
+    {
+        AudioEngine::setVolume(_squishId, std::min(1.f, 0.15f + _squishSm / 2.5f) * 0.9f);
+        AudioEngine::setPitch(_squishId, 0.85f + std::min(_squishSm / 6.f, 0.5f));
+    }
+}
+
+void BoxScene::stopSquish()
+{
+    if (_squishId != AudioEngine::INVALID_AUDIO_ID)
+    {
+        AudioEngine::stop(_squishId);
+        _squishId = AudioEngine::INVALID_AUDIO_ID;
+    }
+    _squishSm = 0.f;
 }
