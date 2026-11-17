@@ -59,17 +59,18 @@ bool BoxScene::init()
     kb->onKeyPressed = [this](KeyboardEvent* e) {
         using K = KeyboardEvent::KeyCode;
         K k = e->getKeyCode();
+        if (k == K::KEY_M) { _sfxOn = !_sfxOn; sfx(Sfx::Click); return; }   // Ton an/aus
         if (_state == State::Menu)
         {
             switch (k)
             {
             case K::KEY_LEFT_ARROW:
-            case K::KEY_RIGHT_ARROW: _mode = (_mode == Mode::Ball) ? Mode::Fluid : Mode::Ball; break;
-            case K::KEY_1: _mode = Mode::Ball; break;
-            case K::KEY_2: _mode = Mode::Fluid; break;
-            case K::KEY_UP_ARROW:   _menuLevel = _menuLevel % kLevels + 1; break;
-            case K::KEY_DOWN_ARROW: _menuLevel = (_menuLevel + kLevels - 2) % kLevels + 1; break;
-            case K::KEY_E: _editorOn = !_editorOn; break;   // Editor-Schalter
+            case K::KEY_RIGHT_ARROW: _mode = (_mode == Mode::Ball) ? Mode::Fluid : Mode::Ball; sfx(Sfx::Select); break;
+            case K::KEY_1: _mode = Mode::Ball; sfx(Sfx::Select); break;
+            case K::KEY_2: _mode = Mode::Fluid; sfx(Sfx::Select); break;
+            case K::KEY_UP_ARROW:   _menuLevel = _menuLevel % kLevels + 1; sfx(Sfx::Click); break;
+            case K::KEY_DOWN_ARROW: _menuLevel = (_menuLevel + kLevels - 2) % kLevels + 1; sfx(Sfx::Click); break;
+            case K::KEY_E: _editorOn = !_editorOn; sfx(Sfx::Select); break;   // Editor-Schalter
             case K::KEY_ENTER:
             case K::KEY_KP_ENTER:
             case K::KEY_RETURN:
@@ -110,15 +111,16 @@ bool BoxScene::init()
         {
             auto begin = [this]() { if (_editorOn) startEditor(); else startGame(); };
             const float cx = kWin / 2;
-            if (p.x > 520 && p.x < 600 && p.y > 85 && p.y < 135) _editorOn = !_editorOn;      // Editor-Schalter
+            if (p.x > 585 && p.x < 635 && p.y > 585 && p.y < 635) { _sfxOn = !_sfxOn; sfx(Sfx::Click); }   // Lautsprecher
+            else if (p.x > 520 && p.x < 600 && p.y > 85 && p.y < 135) { _editorOn = !_editorOn; sfx(Sfx::Select); }      // Editor-Schalter
             else if (p.y > 200 && p.y < 440 && p.x > 75 && p.x < 275) { _mode = Mode::Ball; begin(); }    // Karte: Ball -> Start
             else if (p.y > 200 && p.y < 440 && p.x > 365 && p.x < 565) { _mode = Mode::Fluid; begin(); }  // Karte: Fluid -> Start
-            else if (std::abs(p.x - cx) < 40 && p.y > 125 && p.y < 165) _menuLevel = _menuLevel % kLevels + 1;            // Pfeil hoch
-            else if (std::abs(p.x - cx) < 40 && p.y > 78 && p.y < 100) _menuLevel = (_menuLevel + kLevels - 2) % kLevels + 1;   // Pfeil runter
+            else if (std::abs(p.x - cx) < 40 && p.y > 125 && p.y < 165) { _menuLevel = _menuLevel % kLevels + 1; sfx(Sfx::Click); }            // Pfeil hoch
+            else if (std::abs(p.x - cx) < 40 && p.y > 78 && p.y < 100) { _menuLevel = (_menuLevel + kLevels - 2) % kLevels + 1; sfx(Sfx::Click); }   // Pfeil runter
             else if (std::abs(p.y - 66.f) < 9.f)   // Punkte: Level direkt waehlen
             {
                 int i = (int)std::lround((p.x - (cx - 7.f * kLevels - 7.f)) / 14.f);
-                if (i >= 1 && i <= kLevels) _menuLevel = i;
+                if (i >= 1 && i <= kLevels) { _menuLevel = i; sfx(Sfx::Click); }
             }
         }
         return true;
@@ -251,6 +253,7 @@ void BoxScene::startGame()
     _fromEditor = false;
     _finishTimer = 0.f;
     _state = State::Play;
+    sfx(Sfx::Start);
     startLevel(_menuLevel);
 }
 
@@ -406,8 +409,8 @@ void BoxScene::update(float dt)
         }
         if (_winTimer > 1.5f && !_finished)
         {
-            if (_level < kLevels) startLevel(_level + 1);
-            else _finished = true;
+            if (_level < kLevels) { startLevel(_level + 1); sfx(Sfx::Level); }
+            else { _finished = true; sfx(Sfx::Win); }
         }
         if (_finished && (_finishTimer += dt) > 3.f) _state = State::Menu;
         drawAll();
@@ -421,6 +424,16 @@ void BoxScene::update(float dt)
     _w = std::max(-kMaxW, std::min(kMaxW, _w));
     b2Body_SetAngularVelocity(_boxBody, _w);
 
+    // Geschwindigkeiten vor dem Schritt merken: ein ploetzlicher Sprung = Aufprall (Gravitation allein macht nur ~0,4 m/s)
+    b2Vec2 ballV0{0.f, 0.f};
+    std::vector<b2Vec2> partV0;
+    if (_mode == Mode::Ball) ballV0 = b2Body_GetLinearVelocity(_ball);
+    else
+    {
+        partV0.reserve(_parts.size());
+        for (b2BodyId id : _parts) partV0.push_back(b2Body_GetLinearVelocity(id));
+    }
+
     if (_mode == Mode::Fluid) stepFluid();
     for (int i = 0; i < 3; ++i)
     {
@@ -428,15 +441,39 @@ void BoxScene::update(float dt)
         enforceBounds();
     }
 
+    if (_mode == Mode::Ball)
+    {
+        b2Vec2 d = b2Sub(b2Body_GetLinearVelocity(_ball), ballV0);
+        float dv = std::sqrt(d.x * d.x + d.y * d.y);
+        if (dv > 3.f) sfx(Sfx::HitHard, std::min(1.f, dv / 8.f));
+        else if (dv > 1.2f) sfx(Sfx::HitSoft, std::min(1.f, dv / 4.f));
+    }
+    else
+    {
+        int hits = 0;
+        for (size_t i = 0; i < _parts.size(); ++i)
+        {
+            b2Vec2 d = b2Sub(b2Body_GetLinearVelocity(_parts[i]), partV0[i]);
+            if (d.x * d.x + d.y * d.y > 1.5f * 1.5f) ++hits;
+        }
+        if (hits >= 2) sfx(Sfx::Splat, std::min(1.f, 0.35f + hits / 10.f));
+    }
+
     b2Vec2 g = toV(b2Body_GetWorldPoint(_boxBody, _goalLocal));
     if (_mode == Mode::Ball)
     {
         b2Vec2 b = toV(b2Body_GetPosition(_ball));
         if (std::abs(b.x - g.x) < kWinDist && std::abs(b.y - g.y) < kWinDist)
+        {
             _won = true;
+            sfx(Sfx::Win);
+        }
     }
     else if (countParticlesInGoal() >= kFluidWin)
+    {
         _won = true;
+        sfx(Sfx::Win);
+    }
 
     drawAll();
 }
@@ -490,11 +527,17 @@ void BoxScene::drawAll()
 
     if (_mode == Mode::Ball)
     {
-        // Ball mit Winkelstrich
+        // Ball wie im Menue: schattiert, Licht von oben links (bleibt beim Rollen fest), dazu Rollmarke
         Vec2 p  = px(toV(b2Body_GetPosition(_ball)));
         float a = b2Rot_GetAngle(b2Body_GetRotation(_ball));
-        _draw->drawCircle(p, kBallR * kPPM, kBlack, 1.f);
-        _draw->drawLine(p, Vec2(p.x + cosf(a) * kBallR * kPPM, p.y + sinf(a) * kBallR * kPPM), kBlack, 1.f);
+        const float r = kBallR * kPPM;
+        _draw->drawDot(Vec2(p.x + 2.f, p.y - 3.f), r, Color(0.f, 0.f, 0.f, 0.12f));                  // weicher Schatten
+        _draw->drawDot(p, r, Color(0.08f, 0.14f, 0.35f, 1.f));
+        _draw->drawDot(Vec2(p.x - r * 0.10f, p.y + r * 0.10f), r * 0.84f, Color(0.12f, 0.30f, 0.75f, 1.f));
+        Vec2 spot(p.x + cosf(a) * r * 0.62f, p.y + sinf(a) * r * 0.62f);                              // dreht sich mit
+        _draw->drawDot(spot, r * 0.17f, Color(0.45f, 0.70f, 1.f, 0.8f));
+        _draw->drawDot(Vec2(p.x - r * 0.26f, p.y + r * 0.29f), r * 0.42f, Color(0.45f, 0.70f, 1.f, 0.85f));
+        _draw->drawDot(Vec2(p.x - r * 0.34f, p.y + r * 0.37f), r * 0.16f, Color(1.f, 1.f, 1.f, 0.9f));
 
         // Kontaktpunkte (rot). anchorA ist relativ zum Body von Shape A.
         int cap = b2Body_GetContactCapacity(_ball);
@@ -520,6 +563,8 @@ void BoxScene::drawAll()
 
     // Zeit als 7-Segment (statt Label, da nur DrawNode erlaubt)
     drawTime((long)(_elapsed * 1000.0), Vec2(10, kWin - 40));
+
+    drawSpeaker(Vec2(kWin - 24.f, 24.f), _sfxOn);   // Ton an/aus: M
 
     // Level-Anzeige: Zahl + Punkte fuer alle Levels (gefuellt = erreicht)
     drawNumber(_level, Vec2(kWin - 40, kWin - 40), 8.f);
@@ -710,6 +755,8 @@ void BoxScene::drawMenu()
         else _draw->drawCircle(d, 3.f, ink, 1.f);
     }
 
+    drawSpeaker(Vec2(610.f, 610.f), _sfxOn);
+
     // Editor-Schalter (E oder Klick): aus = grau, an = orange. Enter startet dann den Editor statt des Spiels.
     {
         const Color orange(1.f, 0.6f, 0.1f, 1.f), off(0.62f, 0.68f, 0.80f, 1.f);
@@ -884,6 +931,7 @@ void BoxScene::saveLevels() const
 void BoxScene::startEditor()
 {
     _state      = State::Editor;
+    sfx(Sfx::Start);
     _fromEditor = false;
     _level      = _menuLevel;
     _tool       = 0;
@@ -905,14 +953,14 @@ void BoxScene::editorPointer(int phase, Vec2 world, int button)
             float d = distToSeg(at.x, at.y, L.segs[i]);
             if (d < bd) { bd = d; best = i; }
         }
-        if (best >= 0) { L.segs.erase(L.segs.begin() + best); saveLevels(); }
+        if (best >= 0) { L.segs.erase(L.segs.begin() + best); saveLevels(); sfx(Sfx::Erase); }
     };
 
     if (phase == 0)
     {
         if (button == InputButton::Right) { eraseAt(Vec2(world.x - 320.f, 320.f - world.y)); return; }
         if (_tool == 0) { _drag = true; _dragA = _dragB = p; }
-        else if (_tool == 1) { L.gx = p.x; L.gy = p.y; saveLevels(); }
+        else if (_tool == 1) { L.gx = p.x; L.gy = p.y; saveLevels(); sfx(Sfx::Goal); }
         else eraseAt(Vec2(world.x - 320.f, 320.f - world.y));
     }
     else if (phase == 1)
@@ -926,6 +974,7 @@ void BoxScene::editorPointer(int phase, Vec2 world, int button)
         {
             L.segs.push_back({_dragA.x, _dragA.y, _dragB.x, _dragB.y});
             saveLevels();
+            sfx(Sfx::Pop);
         }
     }
 }
@@ -940,10 +989,10 @@ void BoxScene::editorKey(int key)
     case K::KEY_2: _tool = 1; break;
     case K::KEY_3: _tool = 2; break;
     case K::KEY_Z:
-        if (!L.segs.empty()) { L.segs.pop_back(); saveLevels(); }
+        if (!L.segs.empty()) { L.segs.pop_back(); saveLevels(); sfx(Sfx::Erase); }
         break;
     case K::KEY_DELETE:
-    case K::KEY_BACKSPACE: L.segs.clear(); saveLevels(); break;
+    case K::KEY_BACKSPACE: L.segs.clear(); saveLevels(); sfx(Sfx::Erase); break;
     case K::KEY_R: L = builtinLevel(_level); saveLevels(); break;
     case K::KEY_S: saveLevels(); break;
     case K::KEY_T:
@@ -1067,4 +1116,44 @@ void BoxScene::drawEditor()
     roundedRect(Vec2(kWin - 90.f, 590.f), Vec2(70.f, 28.f), 10.f, Color(1.f, 1.f, 1.f, 1.f), orange, 3.f);
     drawNumber(_level, Vec2(kWin - 90.f - (_level >= 10 ? 12.f : 4.f), 580.f), 6.f);
     _draw->drawLine(Vec2(kWin - 150.f, 580.f), Vec2(kWin - 130.f, 600.f), orange, 4.f);   // Stift
+}
+
+// ------------------------------------------------------------------------------------------------
+// Soundeffekte: Resources/sfx/*.wav (mit tools/make_sfx.py erzeugt). M oder Klick auf den Lautsprecher = Ton an/aus.
+// ------------------------------------------------------------------------------------------------
+void BoxScene::sfx(Sfx id, float volume)
+{
+    if (!_sfxOn) return;
+    static const char* const names[(int)Sfx::Count] = {"click", "select", "start", "hit_soft", "hit_hard", "splat",
+                                                       "win",   "level",  "pop",   "erase",    "goal"};
+    static const float minGap[(int)Sfx::Count]      = {0.03f, 0.03f, 0.10f, 0.08f, 0.08f, 0.12f,
+                                                       0.50f, 0.30f, 0.03f, 0.03f, 0.10f};
+    const int i = (int)id;
+    if (_menuT - _lastSfx[i] < minGap[i]) return;   // _menuT laeuft in allen Zustaenden (Menue, Spiel, Editor)
+    _lastSfx[i] = _menuT;
+    AudioEngine::play2d(std::string("sfx/") + names[i] + ".wav", false, std::max(0.f, std::min(1.f, volume)));
+}
+
+void BoxScene::drawSpeaker(Vec2 c, bool on)
+{
+    const Color ink(0.08f, 0.14f, 0.35f, 1.f), red(0.9f, 0.2f, 0.2f, 1.f);
+    fillRect(Vec2(c.x - 9.f, c.y - 4.f), Vec2(c.x - 3.f, c.y + 4.f), ink);                    // Gehaeuse
+    _draw->drawSolidTriangle(Vec2(c.x - 3.f, c.y - 4.f), Vec2(c.x + 5.f, c.y - 11.f), Vec2(c.x + 5.f, c.y + 11.f), ink, ink, 1.f);
+    _draw->drawSolidTriangle(Vec2(c.x - 3.f, c.y - 4.f), Vec2(c.x + 5.f, c.y + 11.f), Vec2(c.x - 3.f, c.y + 4.f), ink, ink, 1.f);
+    if (on)
+        for (int k = 1; k <= 2; ++k)   // Schallwellen
+        {
+            float r = 6.f + k * 5.f;
+            for (int i = -3; i < 3; ++i)
+            {
+                float a0 = i * 0.22f, a1 = (i + 1) * 0.22f;
+                _draw->drawLine(Vec2(c.x + 4.f + cosf(a0) * r, c.y + sinf(a0) * r),
+                                Vec2(c.x + 4.f + cosf(a1) * r, c.y + sinf(a1) * r), ink, 2.f);
+            }
+        }
+    else
+    {
+        _draw->drawLine(Vec2(c.x + 9.f, c.y - 7.f), Vec2(c.x + 19.f, c.y + 7.f), red, 3.f);   // durchgestrichen
+        _draw->drawLine(Vec2(c.x + 9.f, c.y + 7.f), Vec2(c.x + 19.f, c.y - 7.f), red, 3.f);
+    }
 }

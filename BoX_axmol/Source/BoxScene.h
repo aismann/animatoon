@@ -1,6 +1,7 @@
 #pragma once
 // BoX - Port von PureBasic (Chipmunk) nach Axmol, Physik jetzt Box2D 3.x. Gezeichnet wird ausschliesslich mit ax::DrawNode.
 #include "axmol/axmol.h"
+#include "axmol/audio/AudioEngine.h"
 #include "box2d/box2d.h"
 #include <array>
 #include <vector>
@@ -17,6 +18,9 @@ private:
     void buildWorld(int level);
     void startLevel(int level);
     void drawAll();
+    enum class Sfx { Click, Select, Start, HitSoft, HitHard, Splat, Win, Level, Pop, Erase, Goal, Count };
+    void sfx(Sfx id, float volume = 1.f);               // spielt Resources/sfx/<name>.wav (mit Mindestabstand)
+    void drawSpeaker(ax::Vec2 c, bool on);
     void drawMenu();
     void drawNumber(int n, ax::Vec2 pos, float size);
     void enforceBounds();
@@ -68,6 +72,9 @@ private:
     bool _drag       = false;
     ax::Vec2 _dragA, _dragB, _cursor; // lokale Editor-Koordinaten
     float _swAnim    = 0.f;           // Animation des Menue-Schalters 0..1
+
+    bool _sfxOn = true;                       // Ton an/aus (M oder Klick auf Lautsprecher)
+    float _lastSfx[(int)Sfx::Count] = {};
 
     State _state   = State::Menu;
     Mode _mode     = Mode::Ball;    // im Menue gewaehlt
