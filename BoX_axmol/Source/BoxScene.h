@@ -19,7 +19,7 @@ private:
     void startLevel(int level);
     void drawAll();
     void drawBackground();   // blauer Verlauf (Menue + Spiel)
-    enum class Sfx { Click, Select, Start, HitSoft, HitHard, Win, Level, Pop, Erase, Goal, Count };
+    enum class Sfx { Click, Select, Start, HitSoft, HitHard, Win, Level, Pop, Erase, Goal, Yeah, Count };
     void sfx(Sfx id, float volume = 1.f);               // spielt Content/sfx/<name>.wav (mit Mindestabstand)
     void drawSpeaker(ax::Vec2 c, bool on);
     void updateSquish(float speed);   // Schleim in Bewegung: loopendes "Squosh" (Lautstaerke/Tonhoehe nach Tempo)

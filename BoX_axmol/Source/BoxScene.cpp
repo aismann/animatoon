@@ -476,12 +476,14 @@ void BoxScene::update(float dt)
         {
             _won = true;
             sfx(Sfx::Win);
+            sfx(Sfx::Yeah);   // "yeaahhh" - Ziel erreicht
         }
     }
     else if (countParticlesInGoal() >= kFluidWin)
     {
         _won = true;
         sfx(Sfx::Win);
+        sfx(Sfx::Yeah);   // "yeaahhh" - Ziel erreicht
     }
 
     drawAll();
@@ -1177,9 +1179,9 @@ void BoxScene::sfx(Sfx id, float volume)
 {
     if (!_sfxOn) return;
     static const char* const names[(int)Sfx::Count] = {"click", "select", "start", "hit_soft", "hit_hard",
-                                                       "win",   "level",  "pop",   "erase",    "goal"};
+                                                       "win",   "level",  "pop",   "erase",    "goal", "yeah"};
     static const float minGap[(int)Sfx::Count]      = {0.03f, 0.03f, 0.10f, 0.08f, 0.08f,
-                                                       0.50f, 0.30f, 0.03f, 0.03f, 0.10f};
+                                                       0.50f, 0.30f, 0.03f, 0.03f, 0.10f, 0.80f};
     const int i = (int)id;
     if (_menuT - _lastSfx[i] < minGap[i]) return;   // _menuT laeuft in allen Zustaenden (Menue, Spiel, Editor)
     _lastSfx[i] = _menuT;

@@ -52,3 +52,28 @@ save("level",  seq([tone(659.25, 659.25, 0.09, 0.5), tone(880, 880, 0.14, 0.5, 0
 save("pop",    tone(800, 500, 0.06, 0.55))
 save("erase",  tone(380, 160, 0.09, 0.55))
 save("goal",   seq([tone(700, 700, 0.06, 0.5), tone(1050, 1050, 0.1, 0.5, 0.005, 0.15)], 0.0))
+
+# yeah: "yeaahhh" per Formant-Synthese (Saegezahn-Quelle durch drei zeitvariable Resonatoren). j-e (hoch) -> a (offen) -> hauchiges "h"
+def yeah(d=1.0):
+    n = int(SR * d); x = np.arange(n) / SR; u = x / d
+    f0 = 170 + 90 * np.sin(np.pi * np.clip(u * 1.15, 0, 1)) ** 1.2 - 40 * u           # Tonhoehe steigt, faellt dann
+    f0 = f0 * (1 + 0.015 * np.sin(2 * np.pi * 5.5 * x) * np.clip(u * 3, 0, 1))          # Vibrato
+    ph = np.cumsum(f0) / SR % 1.0
+    src = (1 - ph) ** 2 * 2 - 0.67                                                       # glottisartiger Impuls (Saegezahn-aehnlich)
+    src = src + 0.04 * rng.standard_normal(n) * np.clip((u - 0.55) * 2.5, 0, 1)          # Hauch gegen Ende ("hh")
+    k = np.clip(u / 0.28, 0, 1); k = k * k * (3 - 2 * k)                                 # Uebergang "ye" -> "ah"
+    F = [350 + (800 - 350) * k, 2250 + (1250 - 2250) * k, 2900 + (2600 - 2900) * k]       # F1, F2, F3
+    B = [90, 120, 160]; G = [1.0, 0.7, 0.35]
+    y = np.zeros(n)
+    for fi, bi, gi in zip(F, B, G):
+        r = np.exp(-np.pi * bi / SR); c1 = 2 * r * np.cos(2 * np.pi * fi / SR); c2 = -r * r
+        a = (1 - r) * gi
+        o = np.zeros(n); y1 = y2 = 0.0
+        for i in range(n):
+            v = a * src[i] + c1[i] * y1 + c2 * y2
+            o[i] = v; y2 = y1; y1 = v
+        y += o
+    e = np.minimum(1, x / 0.04) * np.minimum(1, (d - x) / 0.35) * (0.55 + 0.45 * np.sin(np.pi * np.clip(u * 1.2, 0, 1)))
+    return y * e
+
+save("yeah", yeah() * 1.0)
