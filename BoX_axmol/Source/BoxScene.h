@@ -73,6 +73,8 @@ private:
     ax::Vec2 _dragA, _dragB, _cursor; // lokale Editor-Koordinaten
     float _swAnim    = 0.f;           // Animation des Menue-Schalters 0..1
 
+    bool _shineOn = true;                     // Schleim-Glanz an/aus (Schalter im Menue, Taste G)
+    float _shAnim = 1.f;                      // Animation des Glanz-Schalters 0..1
     bool _sfxOn = true;                       // Ton an/aus (M oder Klick auf Lautsprecher)
     float _lastSfx[(int)Sfx::Count] = {};
 

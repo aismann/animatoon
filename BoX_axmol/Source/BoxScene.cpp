@@ -60,6 +60,7 @@ bool BoxScene::init()
         using K = KeyboardEvent::KeyCode;
         K k = e->getKeyCode();
         if (k == K::KEY_M) { _sfxOn = !_sfxOn; sfx(Sfx::Click); return; }   // Ton an/aus
+        if (k == K::KEY_G && _state != State::Editor) { _shineOn = !_shineOn; sfx(Sfx::Select); return; }   // Glanz an/aus
         if (_state == State::Menu)
         {
             switch (k)
@@ -112,6 +113,7 @@ bool BoxScene::init()
             auto begin = [this]() { if (_editorOn) startEditor(); else startGame(); };
             const float cx = kWin / 2;
             if (p.x > 585 && p.x < 635 && p.y > 585 && p.y < 635) { _sfxOn = !_sfxOn; sfx(Sfx::Click); }   // Lautsprecher
+            else if (p.x > 30 && p.x < 130 && p.y > 85 && p.y < 160) { _shineOn = !_shineOn; sfx(Sfx::Select); }   // Glanz-Schalter
             else if (p.x > 520 && p.x < 600 && p.y > 85 && p.y < 135) { _editorOn = !_editorOn; sfx(Sfx::Select); }      // Editor-Schalter
             else if (p.y > 200 && p.y < 440 && p.x > 75 && p.x < 275) { _mode = Mode::Ball; begin(); }    // Karte: Ball -> Start
             else if (p.y > 200 && p.y < 440 && p.x > 365 && p.x < 565) { _mode = Mode::Fluid; begin(); }  // Karte: Fluid -> Start
@@ -394,6 +396,7 @@ void BoxScene::update(float dt)
     {
         _menuT += dt;
         _swAnim += ((_editorOn ? 1.f : 0.f) - _swAnim) * std::min(1.f, dt * 12.f);
+        _shAnim += ((_shineOn ? 1.f : 0.f) - _shAnim) * std::min(1.f, dt * 12.f);
         _won = false;
         drawMenu();
         return;
@@ -738,7 +741,7 @@ void BoxScene::drawMenu()
         float ph = fmodf(t * 0.7f, 1.f);
         if (sel) pts.push_back({Vec2(c.x + 10.f, c.y + 46.f - ph * ph * 90.f), 0.55f + 0.2f * (1.f - ph)});
         MBPalette pal{{kWater[0], kWater[1], kWater[2], kWater[3]}, {0.28f, 0.45f, 0.80f, 1.35f},
-                      kSlimeSoft, kSlimeCore, true, 4.f, 1.5f, {0.f, 3.f, 7.f, 12.f}};
+                      kSlimeSoft, kSlimeCore, _shineOn, 4.f, 1.5f, {0.f, 3.f, 7.f, 12.f}};
         renderMetaballs(pts, pal);
     }
 
@@ -756,6 +759,26 @@ void BoxScene::drawMenu()
     }
 
     drawSpeaker(Vec2(610.f, 610.f), _sfxOn);
+
+    // Glanz-Schalter (G oder Klick): an = Schleim-Gruen, aus = grau. Steuert den Glanz auf dem Schleim.
+    {
+        const Color on(0.50f, 0.80f, 0.10f, 1.f), off(0.62f, 0.68f, 0.80f, 1.f);
+        Vec2 c(80.f, 105.f);
+        Color sc = _shineOn ? on : off;
+        Vec2 s(c.x, c.y + 40.f);                                   // Funkel-Symbol ueber dem Schalter
+        float r = 12.f + (_shineOn ? 2.f * sinf(t * 5.f) : 0.f);
+        _draw->drawLine(Vec2(s.x, s.y - r), Vec2(s.x, s.y + r), sc, 4.f);
+        _draw->drawLine(Vec2(s.x - r, s.y), Vec2(s.x + r, s.y), sc, 4.f);
+        _draw->drawLine(Vec2(s.x - r * 0.5f, s.y - r * 0.5f), Vec2(s.x + r * 0.5f, s.y + r * 0.5f), sc, 2.f);
+        _draw->drawLine(Vec2(s.x - r * 0.5f, s.y + r * 0.5f), Vec2(s.x + r * 0.5f, s.y - r * 0.5f), sc, 2.f);
+        roundedRect(c, Vec2(32.f, 16.f), 16.f,
+                    Color(off.r + (on.r - off.r) * _shAnim, off.g + (on.g - off.g) * _shAnim,
+                          off.b + (on.b - off.b) * _shAnim, 1.f),
+                    ink, 2.f);
+        float kx = c.x - 16.f + 32.f * _shAnim;
+        _draw->drawDot(Vec2(kx, c.y), 12.f, Color(1.f, 1.f, 1.f, 1.f));
+        _draw->drawCircle(Vec2(kx, c.y), 12.f, ink, 1.5f);
+    }
 
     // Editor-Schalter (E oder Klick): aus = grau, an = orange. Enter startet dann den Editor statt des Spiels.
     {
@@ -837,7 +860,7 @@ void BoxScene::drawMetaballs()
     for (b2BodyId id : _parts)
         pts.push_back({px(toV(b2Body_GetPosition(id))), 1.f});
     MBPalette pal{{kWater[0], kWater[1], kWater[2], kWater[3]}, {0.28f, 0.45f, 0.80f, 1.35f},
-                  kSlimeSoft, kSlimeCore, true, 4.f, 1.5f, {0.f, 3.f, 7.f, 12.f}};
+                  kSlimeSoft, kSlimeCore, _shineOn, 4.f, 1.5f, {0.f, 3.f, 7.f, 12.f}};
     renderMetaballs(pts, pal);
 }
 
