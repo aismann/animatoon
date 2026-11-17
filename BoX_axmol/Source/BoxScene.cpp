@@ -13,6 +13,7 @@ constexpr int   kLevels  = 14;
 constexpr float kWallR   = 2.5f / kPPM;          // Wanddicke 5 px (Kapseln statt duenner Segmente -> kein Durchtunneln)
 constexpr float kFrame   = 200.f / kPPM;          // Mitte der Rahmenwand
 constexpr float kInner   = kFrame - kWallR;       // Innenkante des Rahmens
+constexpr float kFriction = 0.25f;               // Reibung Wand/Ball ("Klebrigkeit"); 1 = sehr klebrig, 0 = rutschig
 constexpr float kMaxW    = 8.f;                 // max. Winkelgeschwindigkeit des Kastens (rad/s)
 constexpr float kPartR   = 6.f / kPPM;
 constexpr int   kFluidWin = 4;                  // Partikel im Ziel zum Gewinnen
@@ -274,7 +275,7 @@ void BoxScene::buildWorld(int level)
 
     // Box2D mischt Restitution mit max(), Chipmunk multiplizierte (1*0 = 0) -> hier 0 fuer gleiches Verhalten.
     b2ShapeDef sd             = b2DefaultShapeDef();
-    sd.material.friction      = 1.f;
+    sd.material.friction      = kFriction;
     sd.material.restitution   = 0.f;
 
     auto seg = [&](b2Vec2 a, b2Vec2 b) {
