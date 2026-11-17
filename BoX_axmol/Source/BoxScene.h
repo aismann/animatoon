@@ -18,6 +18,7 @@ private:
     void buildWorld(int level);
     void startLevel(int level);
     void drawAll();
+    void drawBackground();   // blauer Verlauf (Menue + Spiel)
     enum class Sfx { Click, Select, Start, HitSoft, HitHard, Splat, Win, Level, Pop, Erase, Goal, Count };
     void sfx(Sfx id, float volume = 1.f);               // spielt Content/sfx/<name>.wav (mit Mindestabstand)
     void drawSpeaker(ax::Vec2 c, bool on);

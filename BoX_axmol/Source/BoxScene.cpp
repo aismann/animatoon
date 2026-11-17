@@ -486,6 +486,7 @@ void BoxScene::update(float dt)
 void BoxScene::drawAll()
 {
     _draw->clear();
+    drawBackground();
 
     // Startpunkt (blendet in den ersten Sekunden aus): gestrichelter Ring + Pfeil nach unten
     {
@@ -504,18 +505,32 @@ void BoxScene::drawAll()
         }
     }
 
-    // Segmente mit runden Endkappen (Punkte)
-    for (const Seg& s : _segs)
+    // Kasten: halbtransparente Flaeche (dreht sich mit), darauf die Waende. Nur Optik - die Physik nutzt weiter dieselben
+    // 5-px-Kapseln; Schatten und Glanzlinie liegen innerhalb bzw. daneben und aendern nichts an der Kollision.
     {
-        Vec2 a = px(toV(b2Body_GetWorldPoint(_boxBody, s.a)));
-        Vec2 b = px(toV(b2Body_GetWorldPoint(_boxBody, s.b)));
-        _draw->drawLine(a, b, kBlack, 5.f);
-        for (const Vec2& p : {a, b})
-        {
-            _draw->drawDot(p, 5.f, kBlack);
-            _draw->drawDot(p, 2.f, Color(0.78f, 0.84f, 0.95f, 1.f));
-        }
+        Vec2 f[4];
+        for (int i = 0; i < 4; ++i) f[i] = px(toV(b2Body_GetWorldPoint(_boxBody, _segs[i].a)));   // Rahmenecken A, B, C, D
+        _draw->drawSolidPoly(f, 4, Color(1.f, 1.f, 1.f, 0.28f), 0.f, Color(0, 0, 0, 0));
     }
+    const Color ink(0.08f, 0.14f, 0.35f, 1.f);
+    for (int pass = 0; pass < 2; ++pass)   // erst alle Schatten, dann alle Waende (keine Schatten ueber Waenden)
+        for (const Seg& s : _segs)
+        {
+            Vec2 a = px(toV(b2Body_GetWorldPoint(_boxBody, s.a)));
+            Vec2 b = px(toV(b2Body_GetWorldPoint(_boxBody, s.b)));
+            if (pass == 0)
+            {
+                _draw->drawLine(Vec2(a.x + 2.f, a.y - 3.f), Vec2(b.x + 2.f, b.y - 3.f), Color(0.f, 0.f, 0.25f, 0.20f), 7.f);
+                continue;
+            }
+            _draw->drawLine(a, b, ink, 5.f);
+            _draw->drawLine(Vec2(a.x - 0.8f, a.y + 0.8f), Vec2(b.x - 0.8f, b.y + 0.8f), Color(0.55f, 0.70f, 1.f, 0.65f), 1.4f);   // Glanzlinie
+            for (const Vec2& p : {a, b})   // runde Endkappen mit Glanz
+            {
+                _draw->drawDot(p, 5.f, ink);
+                _draw->drawDot(Vec2(p.x - 0.8f, p.y + 0.8f), 2.4f, Color(0.60f, 0.75f, 1.f, 1.f));
+            }
+        }
 
     // Ziel: Zielscheibe mit Ringen, Mittelpunkt und pulsierendem Aussenring (gruen, wie im Editor)
     {
@@ -648,18 +663,23 @@ void BoxScene::strokeLetter(char ch, Vec2 o, float w, float h, const Color& col,
     }
 }
 
-void BoxScene::drawMenu()
+void BoxScene::drawBackground()
 {
-    _draw->clear();
-    const float cx = kWin / 2, t = _menuT;
-
-    // Hintergrund: vertikaler Verlauf aus Baendern
+    // Hintergrund: vertikaler Verlauf aus Baendern (derselbe wie im Menue)
     for (int i = 0; i < 16; ++i)
     {
         float k = i / 15.f;
         fillRect(Vec2(0, i * kWin / 16), Vec2(kWin, (i + 1) * kWin / 16 + 1),
                  Color(0.80f + 0.14f * (1 - k), 0.88f + 0.09f * (1 - k), 1.f - 0.02f * k, 1.f));
     }
+}
+
+void BoxScene::drawMenu()
+{
+    _draw->clear();
+    const float cx = kWin / 2, t = _menuT;
+
+    drawBackground();   // blauer Verlauf
 
     // Weiche Hintergrund-Blobs (Metaballs, blasse Palette), driften langsam
     {
