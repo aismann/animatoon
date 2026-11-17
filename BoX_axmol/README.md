@@ -13,7 +13,7 @@ Levels 1-14 (1-4 aus dem Original, 5-14 neu: Zickzack, Trichter, Pegs, Trennwand
 
 Menue (nur DrawNode, ohne Text): links = ein Ball (1), rechts = Fluid (2); Links/Rechts oder 1/2 waehlt,
 Hoch/Runter waehlt das Start-Level (1-14), Enter/Space startet. Im Spiel bringt Esc zurueck ins Menue, im Menue beendet Esc.
-Fluid: 15 Kreise (3 x 5, r = 6 px), als Metaballs gezeichnet (Marching Squares, nur DrawNode), als Metaballs gezeichnet (Marching Squares, nur DrawNode) mit Viskositaet + Kohaesion (Box2D 3.x hat kein eingebautes Fluid);
+Fluid: 15 Kreise (3 x 5, r = 6 px), als Metaballs gezeichnet (Marching Squares, nur DrawNode; Glanz ist ein eigenes Metaball-Feld), als Metaballs gezeichnet (Marching Squares, nur DrawNode) mit Viskositaet + Kohaesion (Box2D 3.x hat kein eingebautes Fluid);
 gewonnen, wenn 4 Partikel im Ziel sind.
 
 Steuerung: Pfeil links/rechts dreht den Kasten (Winkelgeschwindigkeit summiert sich wie im Original), Esc beendet.

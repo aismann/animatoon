@@ -506,20 +506,19 @@ void BoxScene::drawMenu()
     }
 }
 
-// Metaballs nur mit DrawNode: Skalarfeld aus Partikel-Kernen auf einem Raster, Iso-Konturen per Marching Squares.
-// Drei Schichten (aussen dunkel, Mitte, innen hell) ergeben Tiefe; dazu ein Glanzpunkt pro Partikel.
+// Metaballs nur mit DrawNode: Skalarfelder aus Partikel-Kernen auf einem Raster, Iso-Konturen per Marching Squares.
+// Koerper: 4 Schichten (Rand, tief, Mitte, Kern) fuer Tiefe. Glanz: eigenes, kleineres und nach oben-links
+// versetztes Metaball-Feld, das zusammenfliesst statt einzelner weisser Punkte.
 void BoxScene::drawMetaballs()
 {
     constexpr float cell = 4.f;                 // Rasterweite in Pixeln
-    constexpr float R    = 20.f;                // Kernradius
     constexpr int N      = (int)(kWin / cell) + 2;
-    static std::vector<float> f;
-    f.assign(N * N, 0.f);
+    static std::vector<float> body, shine;
+    body.assign(N * N, 0.f);
+    shine.assign(N * N, 0.f);
 
     int minX = N, minY = N, maxX = 0, maxY = 0;
-    for (b2BodyId id : _parts)
-    {
-        Vec2 p = px(toV(b2Body_GetPosition(id)));
+    auto splat = [&](std::vector<float>& f, Vec2 p, float R) {
         int x0 = std::max(0, (int)std::floor((p.x - R) / cell)), x1 = std::min(N - 1, (int)std::ceil((p.x + R) / cell));
         int y0 = std::max(0, (int)std::floor((p.y - R) / cell)), y1 = std::min(N - 1, (int)std::ceil((p.y + R) / cell));
         minX = std::min(minX, x0); maxX = std::max(maxX, x1);
@@ -531,10 +530,17 @@ void BoxScene::drawMetaballs()
                 float q  = 1.f - (dx * dx + dy * dy) / (R * R);
                 if (q > 0.f) f[y * N + x] += q * q;
             }
+    };
+
+    for (b2BodyId id : _parts)
+    {
+        Vec2 p = px(toV(b2Body_GetPosition(id)));
+        splat(body, p, 20.f);
+        splat(shine, Vec2(p.x - 3.f, p.y + 4.f), 9.f);   // Lichtquelle oben links (y nach oben)
     }
     if (minX > maxX) return;
 
-    auto layer = [&](float T, const Color& col) {
+    auto layer = [&](const std::vector<float>& f, float T, const Color& col) {
         for (int y = minY; y < maxY; ++y)
             for (int x = minX; x < maxX; ++x)
             {
@@ -563,16 +569,15 @@ void BoxScene::drawMetaballs()
             }
     };
 
-    layer(0.30f, Color(0.04f, 0.18f, 0.62f, 1.f));   // Rand / Schatten
-    layer(0.55f, Color(0.15f, 0.45f, 0.98f, 1.f));   // Koerper
-    layer(1.20f, Color(0.50f, 0.78f, 1.00f, 1.f));   // heller Kern
+    // Koerper: von aussen (dunkel) nach innen (hell)
+    layer(body, 0.28f, Color(0.03f, 0.14f, 0.52f, 1.f));   // Rand
+    layer(body, 0.45f, Color(0.07f, 0.30f, 0.85f, 1.f));   // tief
+    layer(body, 0.80f, Color(0.18f, 0.52f, 1.00f, 1.f));   // Mitte
+    layer(body, 1.35f, Color(0.42f, 0.74f, 1.00f, 1.f));   // Kern
 
-    // Glanzpunkte
-    for (b2BodyId id : _parts)
-    {
-        Vec2 p = px(toV(b2Body_GetPosition(id)));
-        _draw->drawDot(Vec2(p.x - 2.f, p.y + 2.5f), 2.2f, Color(1.f, 1.f, 1.f, 0.55f));
-    }
+    // Glanz als Metaballs: weicher Schein + heller Kern (fliesst bei nahen Partikeln zusammen)
+    layer(shine, 0.40f, Color(0.75f, 0.90f, 1.00f, 1.f));
+    layer(shine, 0.85f, Color(1.00f, 1.00f, 1.00f, 1.f));
 }
 
 // Sicherheitsnetz: Ball/Partikel duerfen den Kasten nie verlassen. Liegt ein Koerper ausserhalb des Rahmens
