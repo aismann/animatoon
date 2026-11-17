@@ -56,3 +56,5 @@ Der Ball ist im Spiel wie im Menue schattiert gezeichnet (Licht oben links, Roll
 
 Glanz-Schalter: Variable `_shineOn` (Standard aus). Im Menue links unten (Funkel-Symbol) per Klick oder **G** (auch im Spiel) schaltet
 den Glanz auf dem Schleim an/aus; aus = das zweite Glanz-Feld wird gar nicht erst berechnet (spart Rechenzeit).
+
+Der Ton ist standardmaessig **aus** (`_sfxOn = false` in `BoxScene.h`); mit **M** oder per Klick auf den Lautsprecher schaltest du ihn ein.
