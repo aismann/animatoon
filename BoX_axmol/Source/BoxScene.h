@@ -76,8 +76,8 @@ private:
     ax::Vec2 _dragA, _dragB, _cursor; // lokale Editor-Koordinaten
     float _swAnim    = 0.f;           // Animation des Menue-Schalters 0..1
 
-    bool _shineOn = true;                     // Schleim-Glanz an/aus (Schalter im Menue, Taste G)
-    float _shAnim = 1.f;                      // Animation des Glanz-Schalters 0..1
+    bool _shineOn = false;                    // Schleim-Glanz an/aus (Standard: aus; Schalter im Menue, Taste G)
+    float _shAnim = 0.f;                      // Animation des Glanz-Schalters 0..1
     ax::AudioId _squishId = ax::AudioEngine::INVALID_AUDIO_ID;
     float _squishSm = 0.f;                    // geglaettetes Schleim-Tempo
     bool _sfxOn = true;                       // Ton an/aus (M oder Klick auf Lautsprecher)

@@ -54,5 +54,5 @@ Ausloeser: Menue (Auswahl/Klick/Start), Aufprall des Balls (leise/hart je nach W
 Levelwechsel, "Yeaahhh" (Formant-Synthese) beim Erreichen des Ziels, Editor (Wand/Ziel setzen, loeschen). **M** oder Klick auf den Lautsprecher schaltet den Ton an/aus.
 Der Ball ist im Spiel wie im Menue schattiert gezeichnet (Licht oben links, Rollmarke dreht sich mit).
 
-Glanz-Schalter: Variable `_shineOn` (Standard an). Im Menue links unten (Funkel-Symbol) per Klick oder **G** (auch im Spiel) schaltet
+Glanz-Schalter: Variable `_shineOn` (Standard aus). Im Menue links unten (Funkel-Symbol) per Klick oder **G** (auch im Spiel) schaltet
 den Glanz auf dem Schleim an/aus; aus = das zweite Glanz-Feld wird gar nicht erst berechnet (spart Rechenzeit).
