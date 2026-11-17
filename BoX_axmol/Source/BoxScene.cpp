@@ -8,11 +8,11 @@ constexpr float kPPM     = 100.f;                // Pixel pro Meter (Box2D rechn
 constexpr float kStep    = 1.f / 60.f / 3.f;     // 3 Substeps pro Frame wie im Original
 constexpr float kBallR   = 20.f / kPPM;
 constexpr int   kLevels  = 14;
-constexpr float kWallR   = 3.f / kPPM;          // Wanddicke (Kapseln statt duenner Segmente -> kein Durchtunneln)
+constexpr float kWallR   = 2.5f / kPPM;          // Wanddicke 5 px (Kapseln statt duenner Segmente -> kein Durchtunneln)
 constexpr float kInner   = 200.f / kPPM - kWallR;  // Innenkante des Rahmens
 constexpr float kMaxW    = 8.f;                 // max. Winkelgeschwindigkeit des Kastens (rad/s)
 constexpr float kPartR   = 6.f / kPPM;
-constexpr int   kFluidWin = 8;                  // Partikel im Ziel zum Gewinnen
+constexpr int   kFluidWin = 4;                  // Partikel im Ziel zum Gewinnen
 constexpr float kWinDist = 23.f / kPPM;
 const Color kBlack(0, 0, 0, 1), kBlue(0, 0, 1, 1), kRed(1, 0, 0, 1);
 
@@ -249,16 +249,16 @@ void BoxScene::buildWorld(int level)
     }
     else
     {
-        // Fluid: 3 x 30 kleine Kreise im oberen Streifen des Kastens (Container steht bei Start still)
+        // Fluid: 3 x 5 kleine Kreise im oberen Streifen des Kastens (Container steht bei Start still)
         b2ShapeDef ps           = b2DefaultShapeDef();
         ps.material.friction    = 0.05f;
         ps.material.restitution = 0.f;
         ps.density              = 1.f;
         b2Circle pc{{0.f, 0.f}, kPartR};
         for (int r = 0; r < 3; ++r)
-            for (int c = 0; c < 30; ++c)
+            for (int c = 0; c < 5; ++c)
             {
-                b2Vec2 l          = V(190.f - c * 12.5f, -188.f + r * 14.f);
+                b2Vec2 l          = V(190.f - c * 14.f, -188.f + r * 14.f);
                 b2BodyDef pd      = b2DefaultBodyDef();
                 pd.type           = b2_dynamicBody;
                 pd.isBullet       = true;
@@ -376,7 +376,7 @@ void BoxScene::drawAll()
     {
         b2Vec2 a = toV(b2Body_GetWorldPoint(_boxBody, s.a));
         b2Vec2 b = toV(b2Body_GetWorldPoint(_boxBody, s.b));
-        _draw->drawLine(px(a), px(b), kBlack, 1.f);
+        _draw->drawLine(px(a), px(b), kBlack, 5.f);
     }
     // Ziel
     _draw->drawCircle(px(toV(b2Body_GetWorldPoint(_boxBody, _goalLocal))), _goalR * kPPM, kBlack, 1.f);
@@ -506,22 +506,24 @@ void BoxScene::drawMenu()
     }
 }
 
-// Metaballs nur mit DrawNode: Skalarfeld aus Partikel-Kernen auf einem Raster, Iso-Kontur per Marching Squares,
-// Innenflaeche als Dreiecksfaecher, Kontur als Linien.
+// Metaballs nur mit DrawNode: Skalarfeld aus Partikel-Kernen auf einem Raster, Iso-Konturen per Marching Squares.
+// Drei Schichten (aussen dunkel, Mitte, innen hell) ergeben Tiefe; dazu ein Glanzpunkt pro Partikel.
 void BoxScene::drawMetaballs()
 {
-    constexpr float cell = 6.f;                 // Rasterweite in Pixeln
-    constexpr float R    = 22.f;                // Kernradius
-    constexpr float T    = 0.6f;                // Iso-Wert
+    constexpr float cell = 4.f;                 // Rasterweite in Pixeln
+    constexpr float R    = 20.f;                // Kernradius
     constexpr int N      = (int)(kWin / cell) + 2;
     static std::vector<float> f;
     f.assign(N * N, 0.f);
 
+    int minX = N, minY = N, maxX = 0, maxY = 0;
     for (b2BodyId id : _parts)
     {
         Vec2 p = px(toV(b2Body_GetPosition(id)));
         int x0 = std::max(0, (int)std::floor((p.x - R) / cell)), x1 = std::min(N - 1, (int)std::ceil((p.x + R) / cell));
         int y0 = std::max(0, (int)std::floor((p.y - R) / cell)), y1 = std::min(N - 1, (int)std::ceil((p.y + R) / cell));
+        minX = std::min(minX, x0); maxX = std::max(maxX, x1);
+        minY = std::min(minY, y0); maxY = std::max(maxY, y1);
         for (int y = y0; y <= y1; ++y)
             for (int x = x0; x <= x1; ++x)
             {
@@ -530,63 +532,45 @@ void BoxScene::drawMetaballs()
                 if (q > 0.f) f[y * N + x] += q * q;
             }
     }
+    if (minX > maxX) return;
 
-    const Color fill(0.15f, 0.4f, 1.f, 1.f), edge(0.05f, 0.2f, 0.7f, 1.f);
-    for (int y = 0; y < N - 1; ++y)
-        for (int x = 0; x < N - 1; ++x)
-        {
-            // Ecken gegen den Uhrzeigersinn: unten-links, unten-rechts, oben-rechts, oben-links
-            const int cx[4] = {x, x + 1, x + 1, x}, cy[4] = {y, y, y + 1, y + 1};
-            float v[4]; Vec2 c[4];
-            int inside = 0;
-            for (int i = 0; i < 4; ++i)
+    auto layer = [&](float T, const Color& col) {
+        for (int y = minY; y < maxY; ++y)
+            for (int x = minX; x < maxX; ++x)
             {
-                v[i] = f[cy[i] * N + cx[i]];
-                c[i] = Vec2(cx[i] * cell, cy[i] * cell);
-                inside += v[i] >= T;
-            }
-            if (inside == 0) continue;
-
-            Vec2 poly[8]; int n = 0;
-            Vec2 cross[4]; int nc = 0;
-            for (int i = 0; i < 4; ++i)
-            {
-                int j = (i + 1) & 3;
-                if (v[i] >= T) poly[n++] = c[i];
-                if ((v[i] >= T) != (v[j] >= T))
+                // Ecken gegen den Uhrzeigersinn: unten-links, unten-rechts, oben-rechts, oben-links
+                const int cx[4] = {x, x + 1, x + 1, x}, cy[4] = {y, y, y + 1, y + 1};
+                float v[4]; Vec2 c[4];
+                int inside = 0;
+                for (int i = 0; i < 4; ++i)
                 {
-                    float t = (T - v[i]) / (v[j] - v[i]);
-                    Vec2 pt = c[i] + (c[j] - c[i]) * t;
-                    poly[n++] = pt;
-                    cross[nc++] = pt;
+                    v[i] = f[cy[i] * N + cx[i]];
+                    c[i] = Vec2(cx[i] * cell, cy[i] * cell);
+                    inside += v[i] >= T;
                 }
+                if (inside == 0) continue;
+
+                Vec2 poly[8]; int n = 0;
+                for (int i = 0; i < 4; ++i)
+                {
+                    int j = (i + 1) & 3;
+                    if (v[i] >= T) poly[n++] = c[i];
+                    if ((v[i] >= T) != (v[j] >= T))
+                        poly[n++] = c[i] + (c[j] - c[i]) * ((T - v[i]) / (v[j] - v[i]));
+                }
+                for (int i = 1; i + 1 < n; ++i)
+                    _draw->drawSolidTriangle(poly[0], poly[i], poly[i + 1], col, col, 0.5f);
             }
-            for (int i = 1; i + 1 < n; ++i)
-                _draw->drawSolidTriangle(poly[0], poly[i], poly[i + 1], fill, fill, 0.5f);
-            for (int i = 0; i + 1 < nc; i += 2)
-                _draw->drawLine(cross[i], cross[i + 1], edge, 1.5f, DrawNode::EndStyle::Butt, DrawNode::EndStyle::Butt);
-        }
-}
-
-// Sicherheitsnetz: Ball/Partikel duerfen den Kasten nie verlassen. Liegt ein Koerper ausserhalb des Rahmens
-// (z.B. durch extreme Drehung), wird er in Container-Koordinaten zurueck in den Kasten gesetzt.
-void BoxScene::enforceBounds()
-{
-    auto fix = [&](b2BodyId id, float r) {
-        b2Vec2 l = toV(b2Body_GetLocalPoint(_boxBody, b2Body_GetPosition(id)));
-        const float lim = kInner - r;
-        if (std::abs(l.x) <= lim && std::abs(l.y) <= lim) return;
-        b2Vec2 cl{std::max(-lim, std::min(lim, l.x)), std::max(-lim, std::min(lim, l.y))};
-        b2Vec2 w = toV(b2Body_GetWorldPoint(_boxBody, cl));
-        b2Body_SetTransform(id, {w.x, w.y}, b2Body_GetRotation(id));
-        b2Body_SetLinearVelocity(id, b2Body_GetWorldPointVelocity(_boxBody, {w.x, w.y}));
     };
-    if (B2_IS_NON_NULL(_ball)) fix(_ball, kBallR);
-    for (b2BodyId id : _parts) fix(id, kPartR);
-}
 
-void BoxScene::drawNumber(int n, Vec2 pos, float size)
-{
-    std::string s = std::to_string(n);
-    for (char ch : s) { drawDigit(ch - '0', pos, size); pos.x += size + 8; }
+    layer(0.30f, Color(0.04f, 0.18f, 0.62f, 1.f));   // Rand / Schatten
+    layer(0.55f, Color(0.15f, 0.45f, 0.98f, 1.f));   // Koerper
+    layer(1.20f, Color(0.50f, 0.78f, 1.00f, 1.f));   // heller Kern
+
+    // Glanzpunkte
+    for (b2BodyId id : _parts)
+    {
+        Vec2 p = px(toV(b2Body_GetPosition(id)));
+        _draw->drawDot(Vec2(p.x - 2.f, p.y + 2.5f), 2.2f, Color(1.f, 1.f, 1.f, 0.55f));
+    }
 }

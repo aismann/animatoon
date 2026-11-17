@@ -13,8 +13,8 @@ Levels 1-14 (1-4 aus dem Original, 5-14 neu: Zickzack, Trichter, Pegs, Trennwand
 
 Menue (nur DrawNode, ohne Text): links = ein Ball (1), rechts = Fluid (2); Links/Rechts oder 1/2 waehlt,
 Hoch/Runter waehlt das Start-Level (1-14), Enter/Space startet. Im Spiel bringt Esc zurueck ins Menue, im Menue beendet Esc.
-Fluid: 90 Kreise (r = 6 px), als Metaballs gezeichnet (Marching Squares, nur DrawNode), als Metaballs gezeichnet (Marching Squares, nur DrawNode) mit Viskositaet + Kohaesion (Box2D 3.x hat kein eingebautes Fluid);
-gewonnen, wenn 8 Partikel im Ziel sind.
+Fluid: 15 Kreise (3 x 5, r = 6 px), als Metaballs gezeichnet (Marching Squares, nur DrawNode), als Metaballs gezeichnet (Marching Squares, nur DrawNode) mit Viskositaet + Kohaesion (Box2D 3.x hat kein eingebautes Fluid);
+gewonnen, wenn 4 Partikel im Ziel sind.
 
 Steuerung: Pfeil links/rechts dreht den Kasten (Winkelgeschwindigkeit summiert sich wie im Original), Esc beendet.
 Ziel: Ball in den kleinen Kreis unten rechts bringen; Zeit (ms) friert dann ein und wird blau.
@@ -24,5 +24,5 @@ Gegen Axmol `dev` (3.x: KeyboardEvent/KeyboardEventListener, axmol/scene/*) gepr
 Hinweis: Box2D 3.x (Meter, 100 px = 1 m) statt Chipmunk; y-Achse ist gespiegelt (oben = +y).
 Nicht kompiliert (kein Axmol-SDK in dieser Umgebung) - API-Namen gegen deine 3.0-Version pruefen.
 
-Ausbruchsschutz: Waende sind Kapseln (3 px), Ball/Partikel sind Bullets, die Kasten-Drehzahl ist auf 8 rad/s begrenzt,
+Ausbruchsschutz: Waende sind Kapseln (5 px dick, auch so gezeichnet), Ball/Partikel sind Bullets, die Kasten-Drehzahl ist auf 8 rad/s begrenzt,
 und `enforceBounds()` setzt jeden Koerper, der trotzdem ausserhalb des Rahmens waere, nach jedem Physik-Schritt zurueck.
