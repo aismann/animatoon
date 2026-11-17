@@ -1142,7 +1142,7 @@ void BoxScene::drawEditor()
 }
 
 // ------------------------------------------------------------------------------------------------
-// Soundeffekte: Resources/sfx/*.wav (mit tools/make_sfx.py erzeugt). M oder Klick auf den Lautsprecher = Ton an/aus.
+// Soundeffekte: Content/sfx/*.wav (mit tools/make_sfx.py erzeugt). M oder Klick auf den Lautsprecher = Ton an/aus.
 // ------------------------------------------------------------------------------------------------
 void BoxScene::sfx(Sfx id, float volume)
 {

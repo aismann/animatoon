@@ -19,7 +19,7 @@ private:
     void startLevel(int level);
     void drawAll();
     enum class Sfx { Click, Select, Start, HitSoft, HitHard, Splat, Win, Level, Pop, Erase, Goal, Count };
-    void sfx(Sfx id, float volume = 1.f);               // spielt Resources/sfx/<name>.wav (mit Mindestabstand)
+    void sfx(Sfx id, float volume = 1.f);               // spielt Content/sfx/<name>.wav (mit Mindestabstand)
     void drawSpeaker(ax::Vec2 c, bool on);
     void drawMenu();
     void drawNumber(int n, ax::Vec2 pos, float size);

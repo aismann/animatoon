@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Erzeugt die Soundeffekte (16-bit mono WAV, 44.1 kHz) synthetisch. Aufruf: python3 make_sfx.py ../Resources/sfx"""
+"""Erzeugt die Soundeffekte (16-bit mono WAV, 44.1 kHz) synthetisch. Aufruf: python3 make_sfx.py ../Content/sfx"""
 import sys, wave
 import numpy as np
 
