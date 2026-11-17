@@ -388,6 +388,7 @@ void BoxScene::update(float dt)
     }
     if (_won)
     {
+        _menuT += dt;
         _winTimer += dt;
         if (_fromEditor && _winTimer > 1.5f)
         {
@@ -404,6 +405,7 @@ void BoxScene::update(float dt)
         return;
     }
 
+    _menuT += dt;
     _elapsed += dt;
     if (_left)  _w += 0.2f;
     if (_right) _w -= 0.2f;   // y-Achse gespiegelt: rechts = im Uhrzeigersinn = negativ
@@ -434,15 +436,48 @@ void BoxScene::drawAll()
 {
     _draw->clear();
 
-    // Segmente
+    // Startpunkt (blendet in den ersten Sekunden aus): gestrichelter Ring + Pfeil nach unten
+    {
+        float fade = std::max(0.f, 1.f - (float)_elapsed / 2.5f);
+        if (fade > 0.f)
+        {
+            Vec2 s(500.f, kWin - 150.f);
+            Color oc(0.85f, 0.45f, 0.2f, fade);
+            for (int i = 0; i < 16; i += 2)
+            {
+                float a0 = i * 3.14159265f / 8.f, a1 = (i + 1) * 3.14159265f / 8.f;
+                _draw->drawLine(Vec2(s.x + cosf(a0) * 30.f, s.y + sinf(a0) * 30.f),
+                                Vec2(s.x + cosf(a1) * 30.f, s.y + sinf(a1) * 30.f), oc, 2.f);
+            }
+            _draw->drawSolidTriangle(Vec2(s.x - 8.f, s.y - 38.f), Vec2(s.x + 8.f, s.y - 38.f), Vec2(s.x, s.y - 50.f), oc, oc, 1.f);
+        }
+    }
+
+    // Segmente mit runden Endkappen (Punkte)
     for (const Seg& s : _segs)
     {
-        b2Vec2 a = toV(b2Body_GetWorldPoint(_boxBody, s.a));
-        b2Vec2 b = toV(b2Body_GetWorldPoint(_boxBody, s.b));
-        _draw->drawLine(px(a), px(b), kBlack, 5.f);
+        Vec2 a = px(toV(b2Body_GetWorldPoint(_boxBody, s.a)));
+        Vec2 b = px(toV(b2Body_GetWorldPoint(_boxBody, s.b)));
+        _draw->drawLine(a, b, kBlack, 5.f);
+        for (const Vec2& p : {a, b})
+        {
+            _draw->drawDot(p, 5.f, kBlack);
+            _draw->drawDot(p, 2.f, Color(0.78f, 0.84f, 0.95f, 1.f));
+        }
     }
-    // Ziel
-    _draw->drawCircle(px(toV(b2Body_GetWorldPoint(_boxBody, _goalLocal))), _goalR * kPPM, kBlack, 1.f);
+
+    // Ziel: Zielscheibe mit Ringen, Mittelpunkt und pulsierendem Aussenring (gruen, wie im Editor)
+    {
+        Vec2 g   = px(toV(b2Body_GetWorldPoint(_boxBody, _goalLocal)));
+        float r  = _goalR * kPPM;
+        float pu = 0.5f + 0.5f * sinf(_menuT * 4.f);
+        const Color gr(0.1f, 0.55f, 0.25f, 1.f);
+        _draw->drawDot(g, r, Color(0.2f, 0.75f, 0.35f, 0.35f));
+        _draw->drawCircle(g, r, gr, 3.f);
+        _draw->drawCircle(g, r * 0.55f, gr, 2.f);
+        _draw->drawDot(g, 3.5f, gr);
+        _draw->drawCircle(g, r + 4.f + 5.f * pu, Color(0.1f, 0.55f, 0.25f, 0.5f * (1.f - pu)), 2.f);
+    }
 
     if (_mode == Mode::Ball)
     {
