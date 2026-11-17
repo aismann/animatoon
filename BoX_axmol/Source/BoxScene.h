@@ -23,7 +23,7 @@ private:
     void stepFluid();
     void drawMetaballs();                 // Fluid im Spiel
     struct MBPoint { ax::Vec2 p; float s; };                       // Position (px) + Groessenfaktor (1 = 20 px Kern)
-    struct MBPalette { ax::Color c[4]; float t[4]; ax::Color soft, core; bool shine; };
+    struct MBPalette { ax::Color c[4]; float t[4]; ax::Color soft, core; bool shine; float cell = 4.f, smooth = 1.5f; };
     void renderMetaballs(const std::vector<MBPoint>& pts, const MBPalette& pal);
     void fillRect(ax::Vec2 lo, ax::Vec2 hi, const ax::Color& col);
     void roundedRect(ax::Vec2 c, ax::Vec2 half, float r, const ax::Color& fill, const ax::Color& border, float thick);

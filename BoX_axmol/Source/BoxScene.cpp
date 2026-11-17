@@ -1,4 +1,5 @@
 #include "BoxScene.h"
+#include "MetaballMesh.h"
 using namespace ax;
 
 namespace
@@ -445,8 +446,10 @@ void BoxScene::drawTime(long ms, Vec2 pos)
 
 namespace
 {
-const Color kWater[4] = {Color(0.03f, 0.14f, 0.52f, 1.f), Color(0.07f, 0.30f, 0.85f, 1.f),
-                         Color(0.18f, 0.52f, 1.00f, 1.f), Color(0.42f, 0.74f, 1.00f, 1.f)};
+// Niedriger Alpha-Wert: die vier Schichten liegen uebereinander, innen addiert sich die Deckkraft (Rand duenn, Kern dicht).
+constexpr float kWaterAlpha = 0.32f;
+const Color kWater[4] = {Color(0.03f, 0.14f, 0.52f, kWaterAlpha), Color(0.07f, 0.30f, 0.85f, kWaterAlpha),
+                         Color(0.18f, 0.52f, 1.00f, kWaterAlpha), Color(0.42f, 0.74f, 1.00f, kWaterAlpha)};
 }
 
 void BoxScene::fillRect(Vec2 lo, Vec2 hi, const Color& col)
@@ -509,7 +512,7 @@ void BoxScene::drawMenu()
                           2.2f + 0.5f * sinf(t * 0.5f + i)});
         MBPalette pal{{Color(0.70f, 0.82f, 0.98f, 1.f), Color(0.74f, 0.85f, 0.99f, 1.f), Color(0.79f, 0.89f, 1.f, 1.f),
                        Color(0.84f, 0.92f, 1.f, 1.f)},
-                      {0.30f, 0.50f, 0.85f, 1.40f}, Color(), Color(), false};
+                      {0.30f, 0.50f, 0.85f, 1.40f}, Color(), Color(), false, 8.f, 3.f};
         renderMetaballs(bg, pal);
     }
 
@@ -583,7 +586,7 @@ void BoxScene::drawMenu()
         float ph = fmodf(t * 0.7f, 1.f);
         if (sel) pts.push_back({Vec2(c.x + 10.f, c.y + 46.f - ph * ph * 90.f), 0.55f + 0.2f * (1.f - ph)});
         MBPalette pal{{kWater[0], kWater[1], kWater[2], kWater[3]}, {0.28f, 0.45f, 0.80f, 1.35f},
-                      Color(0.75f, 0.90f, 1.f, 1.f), Color(1.f, 1.f, 1.f, 1.f), true};
+                      Color(0.75f, 0.90f, 1.f, 0.45f), Color(1.f, 1.f, 1.f, 0.8f), true};
         renderMetaballs(pts, pal);
     }
 
@@ -605,11 +608,11 @@ void BoxScene::drawMenu()
 // Koerper: 4 Schichten fuer Tiefe. Glanz (optional): eigenes, kleineres, nach oben-links versetztes Metaball-Feld.
 void BoxScene::renderMetaballs(const std::vector<MBPoint>& pts, const MBPalette& pal)
 {
-    constexpr float cell = 4.f;                 // Rasterweite in Pixeln
-    constexpr int N      = (int)(kWin / cell) + 2;
+    const float cell = pal.cell;
+    const int N      = (int)(kWin / cell) + 2;
     static std::vector<float> body, shine;
-    body.assign(N * N, 0.f);
-    if (pal.shine) shine.assign(N * N, 0.f);
+    body.assign((size_t)N * N, 0.f);
+    if (pal.shine) shine.assign((size_t)N * N, 0.f);
 
     int minX = N, minY = N, maxX = 0, maxY = 0;
     auto splat = [&](std::vector<float>& f, Vec2 p, float R) {
@@ -622,7 +625,7 @@ void BoxScene::renderMetaballs(const std::vector<MBPoint>& pts, const MBPalette&
             {
                 float dx = x * cell - p.x, dy = y * cell - p.y;
                 float q  = 1.f - (dx * dx + dy * dy) / (R * R);
-                if (q > 0.f) f[y * N + x] += q * q;
+                if (q > 0.f) f[(size_t)y * N + x] += q * q;
             }
     };
 
@@ -633,33 +636,15 @@ void BoxScene::renderMetaballs(const std::vector<MBPoint>& pts, const MBPalette&
     }
     if (minX > maxX) return;
 
+    // Clipper2: Zellen -> Union -> Closing + Chaikin -> Delaunay-Dreiecke. Die Dreiecke ueberlappen nicht,
+    // deshalb funktionieren auch halbtransparente Schichten ohne Doppelblending.
+    const Color none(0.f, 0.f, 0.f, 0.f);
     auto layer = [&](const std::vector<float>& f, float T, const Color& col) {
-        for (int y = minY; y < maxY; ++y)
-            for (int x = minX; x < maxX; ++x)
-            {
-                // Ecken gegen den Uhrzeigersinn: unten-links, unten-rechts, oben-rechts, oben-links
-                const int cx[4] = {x, x + 1, x + 1, x}, cy[4] = {y, y, y + 1, y + 1};
-                float v[4]; Vec2 c[4];
-                int inside = 0;
-                for (int i = 0; i < 4; ++i)
-                {
-                    v[i] = f[cy[i] * N + cx[i]];
-                    c[i] = Vec2(cx[i] * cell, cy[i] * cell);
-                    inside += v[i] >= T;
-                }
-                if (inside == 0) continue;
-
-                Vec2 poly[8]; int n = 0;
-                for (int i = 0; i < 4; ++i)
-                {
-                    int j = (i + 1) & 3;
-                    if (v[i] >= T) poly[n++] = c[i];
-                    if ((v[i] >= T) != (v[j] >= T))
-                        poly[n++] = c[i] + (c[j] - c[i]) * ((T - v[i]) / (v[j] - v[i]));
-                }
-                for (int i = 1; i + 1 < n; ++i)
-                    _draw->drawSolidTriangle(poly[0], poly[i], poly[i + 1], col, col, 0.5f);
-            }
+        static mb::Mesh mesh;
+        if (!mb::buildMesh(f, N, cell, minX, minY, maxX, maxY, T, pal.smooth, 1, mesh)) return;
+        for (const auto& t : mesh.tris)
+            _draw->drawSolidTriangle(Vec2((float)t[0].x, (float)t[0].y), Vec2((float)t[1].x, (float)t[1].y),
+                                     Vec2((float)t[2].x, (float)t[2].y), col, none, 0.f);
     };
 
     for (int i = 0; i < 4; ++i) layer(body, pal.t[i], pal.c[i]);   // von aussen (dunkel) nach innen (hell)
@@ -677,7 +662,7 @@ void BoxScene::drawMetaballs()
     for (b2BodyId id : _parts)
         pts.push_back({px(toV(b2Body_GetPosition(id))), 1.f});
     MBPalette pal{{kWater[0], kWater[1], kWater[2], kWater[3]}, {0.28f, 0.45f, 0.80f, 1.35f},
-                  Color(0.75f, 0.90f, 1.f, 1.f), Color(1.f, 1.f, 1.f, 1.f), true};
+                  Color(0.75f, 0.90f, 1.f, 0.45f), Color(1.f, 1.f, 1.f, 0.8f), true};
     renderMetaballs(pts, pal);
 }
 

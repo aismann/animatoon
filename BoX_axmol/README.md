@@ -26,3 +26,8 @@ Nicht kompiliert (kein Axmol-SDK in dieser Umgebung) - API-Namen gegen deine 3.0
 
 Ausbruchsschutz: Waende sind Kapseln (5 px dick, auch so gezeichnet), Ball/Partikel sind Bullets, die Kasten-Drehzahl ist auf 8 rad/s begrenzt,
 und `enforceBounds()` setzt jeden Koerper, der trotzdem ausserhalb des Rahmens waere, nach jedem Physik-Schritt zurueck.
+
+Metaballs mit Clipper2 (`Source/MetaballMesh.h`, header-only): Marching-Squares-Zellen -> `Union` (saubere Aussen-/Lochkonturen)
+-> `InflatePaths` +/- (Closing) -> Chaikin -> `Triangulate` (Delaunay). Wenige, nicht ueberlappende Dreiecke, daher
+sind halbtransparente Wasserschichten (`kWaterAlpha`, Standard 0,32) ohne Doppelblending moeglich.
+Clipper2 ist in Axmol bereits gebuendelt (`clipper2/clipper.h`, `clipper2/clipper.triangulation.h`).
