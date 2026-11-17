@@ -443,79 +443,173 @@ void BoxScene::drawTime(long ms, Vec2 pos)
     for (char c : s) { drawDigit(c - '0', Vec2(x, pos.y), size); x += size + 8; }
 }
 
-void BoxScene::drawMenu()
+namespace
 {
-    _draw->clear();
-    const float cx = kWin / 2;
+const Color kWater[4] = {Color(0.03f, 0.14f, 0.52f, 1.f), Color(0.07f, 0.30f, 0.85f, 1.f),
+                         Color(0.18f, 0.52f, 1.00f, 1.f), Color(0.42f, 0.74f, 1.00f, 1.f)};
+}
 
-    // Titel: drehender Kasten mit Ball und Ziel (Logo)
-    float a = _menuT * 0.8f;
-    auto rot = [&](float x, float y) {
-        return Vec2(cx + x * cosf(a) - y * sinf(a), 520 + x * sinf(a) + y * cosf(a));
+void BoxScene::fillRect(Vec2 lo, Vec2 hi, const Color& col)
+{
+    _draw->drawSolidTriangle(lo, Vec2(hi.x, lo.y), hi, col, col, 0.f);
+    _draw->drawSolidTriangle(lo, hi, Vec2(lo.x, hi.y), col, col, 0.f);
+}
+
+void BoxScene::roundedRect(Vec2 c, Vec2 half, float r, const Color& fill, const Color& border, float thick)
+{
+    std::vector<Vec2> poly;
+    const Vec2 ctr[4] = {Vec2(c.x + half.x - r, c.y - half.y + r), Vec2(c.x + half.x - r, c.y + half.y - r),
+                         Vec2(c.x - half.x + r, c.y + half.y - r), Vec2(c.x - half.x + r, c.y - half.y + r)};
+    for (int k = 0; k < 4; ++k)                      // gegen den Uhrzeigersinn, je 6 Punkte pro Ecke
+        for (int i = 0; i <= 6; ++i)
+        {
+            float a = (-90.f + k * 90.f + i * 15.f) * 3.14159265f / 180.f;
+            poly.push_back(Vec2(ctr[k].x + cosf(a) * r, ctr[k].y + sinf(a) * r));
+        }
+    _draw->drawSolidPoly(poly.data(), (unsigned)poly.size(), fill, thick, border);
+}
+
+// Buchstaben B, O, X als dicke Linienzuege (nur DrawNode)
+void BoxScene::strokeLetter(char ch, Vec2 o, float w, float h, const Color& col, float thick)
+{
+    auto L = [&](float x1, float y1, float x2, float y2) {
+        _draw->drawLine(Vec2(o.x + x1 * w, o.y + y1 * h), Vec2(o.x + x2 * w, o.y + y2 * h), col, thick);
     };
-    const float s = 50.f;
-    Vec2 q[4] = {rot(-s, -s), rot(-s, s), rot(s, s), rot(s, -s)};
-    for (int i = 0; i < 4; ++i) _draw->drawLine(q[i], q[(i + 1) % 4], kBlack, 2.f);
-    _draw->drawLine(rot(-s, 0), rot(s * 0.5f, 0), kBlack, 2.f);
-    _draw->drawCircle(rot(s * 0.6f, s * 0.6f), 8.f, kBlack, 1.f);
-    _draw->drawDot(rot(0, -s * 0.5f), 7.f, kBlack);
-
-    // Zwei Felder: 1 = ein Ball, 2 = Fluid
-    for (int m = 0; m < 2; ++m)
+    if (ch == 'B')
     {
-        bool sel   = (int)_mode == m;
-        float px0  = (m == 0 ? 175.f : 465.f);
-        Vec2 lo(px0 - 110, 190), hi(px0 + 110, 420);
-        float th   = sel ? 4.f : 1.f;
-        Color col  = sel ? kBlue : kBlack;
-        _draw->drawLine(lo, Vec2(hi.x, lo.y), col, th);
-        _draw->drawLine(Vec2(hi.x, lo.y), hi, col, th);
-        _draw->drawLine(hi, Vec2(lo.x, hi.y), col, th);
-        _draw->drawLine(Vec2(lo.x, hi.y), lo, col, th);
-
-        Vec2 c(px0, 330);
-        if (m == 0)
-        {
-            float b = sel ? sinf(_menuT * 6.f) * 10.f : 0.f;   // Ball wippt, wenn gewaehlt
-            _draw->drawCircle(Vec2(c.x, c.y + b), 40.f, kBlack, 2.f);
-            _draw->drawLine(Vec2(c.x, c.y + b), Vec2(c.x + 40.f * cosf(_menuT * 3.f), c.y + b + 40.f * sinf(_menuT * 3.f)),
-                            kBlack, 2.f);
-        }
-        else
-        {
-            const Color water(0.1f, 0.35f, 0.95f, 0.85f);
-            for (int r = 0; r < 4; ++r)
-                for (int k = 0; k < 8; ++k)
-                {
-                    float wave = sel ? sinf(_menuT * 5.f + k * 0.8f) * 4.f : 0.f;
-                    _draw->drawDot(Vec2(c.x - 70 + k * 20.f, c.y - 30 + r * 16.f + wave), 7.f, water);
-                }
-        }
-        drawDigit(m + 1, Vec2(px0 - 8, 215), 8.f);
+        L(0, 0, 0, 1);
+        L(0, 1, .7f, 1); L(.7f, 1, 1, .88f); L(1, .88f, 1, .62f); L(1, .62f, .7f, .5f); L(.7f, .5f, 0, .5f);
+        L(.7f, .5f, 1, .38f); L(1, .38f, 1, .12f); L(1, .12f, .7f, 0); L(.7f, 0, 0, 0);
     }
-
-    // Start-Level (Hoch/Runter): Zahl zwischen zwei Pfeilen + Punkte fuer alle Levels
-    drawNumber(_menuLevel, Vec2(cx - (_menuLevel >= 10 ? 16.f : 8.f), 100), 8.f);
-    _draw->drawSolidTriangle(Vec2(cx - 8, 140), Vec2(cx + 8, 140), Vec2(cx, 154), kBlack, kBlack, 1.f);
-    _draw->drawSolidTriangle(Vec2(cx - 8, 90), Vec2(cx + 8, 90), Vec2(cx, 76), kBlack, kBlack, 1.f);
-    for (int i = 1; i <= kLevels; ++i)
+    else if (ch == 'X')
     {
-        Vec2 d(cx - 7 * kLevels + i * 14 - 7, 55);
-        if (i == _menuLevel) _draw->drawDot(d, 4.f, kBlue);
-        else _draw->drawCircle(d, 3.f, kBlack, 1.f);
+        L(0, 0, 1, 1);
+        L(0, 1, 1, 0);
     }
 }
 
-// Metaballs nur mit DrawNode: Skalarfelder aus Partikel-Kernen auf einem Raster, Iso-Konturen per Marching Squares.
-// Koerper: 4 Schichten (Rand, tief, Mitte, Kern) fuer Tiefe. Glanz: eigenes, kleineres und nach oben-links
-// versetztes Metaball-Feld, das zusammenfliesst statt einzelner weisser Punkte.
-void BoxScene::drawMetaballs()
+void BoxScene::drawMenu()
+{
+    _draw->clear();
+    const float cx = kWin / 2, t = _menuT;
+
+    // Hintergrund: vertikaler Verlauf aus Baendern
+    for (int i = 0; i < 16; ++i)
+    {
+        float k = i / 15.f;
+        fillRect(Vec2(0, i * kWin / 16), Vec2(kWin, (i + 1) * kWin / 16 + 1),
+                 Color(0.80f + 0.14f * (1 - k), 0.88f + 0.09f * (1 - k), 1.f - 0.02f * k, 1.f));
+    }
+
+    // Weiche Hintergrund-Blobs (Metaballs, blasse Palette), driften langsam
+    {
+        std::vector<MBPoint> bg;
+        for (int i = 0; i < 6; ++i)
+            bg.push_back({Vec2(cx + sinf(t * 0.3f + i * 1.7f) * 260.f, 320 + cosf(t * 0.23f + i * 2.3f) * 280.f),
+                          2.2f + 0.5f * sinf(t * 0.5f + i)});
+        MBPalette pal{{Color(0.70f, 0.82f, 0.98f, 1.f), Color(0.74f, 0.85f, 0.99f, 1.f), Color(0.79f, 0.89f, 1.f, 1.f),
+                       Color(0.84f, 0.92f, 1.f, 1.f)},
+                      {0.30f, 0.50f, 0.85f, 1.40f}, Color(), Color(), false};
+        renderMetaballs(bg, pal);
+    }
+
+    // Titel "BOX": B und X als Linienbuchstaben, das O ist der drehende Kasten mit Ball und Ziel
+    const Color ink(0.08f, 0.14f, 0.35f, 1.f);
+    const float lw = 56.f, lh = 84.f;
+    for (int i = 0; i < 3; ++i)
+    {
+        float bob = sinf(t * 2.f + i * 0.9f) * 5.f;
+        float x   = cx + (i - 1) * 110.f - lw / 2;
+        float y   = 505.f + bob;
+        if (i == 1)
+        {
+            float a = t * 0.9f;
+            auto rot = [&](float px_, float py_) {
+                return Vec2(cx + px_ * cosf(a) - py_ * sinf(a), y + lh / 2 + px_ * sinf(a) + py_ * cosf(a));
+            };
+            const float s = 42.f;
+            Vec2 q[4] = {rot(-s, -s), rot(-s, s), rot(s, s), rot(s, -s)};
+            for (int k = 0; k < 4; ++k) _draw->drawLine(q[k], q[(k + 1) & 3], ink, 8.f);
+            _draw->drawLine(rot(-s, 0), rot(s * 0.3f, 0), ink, 5.f);   // Innenwand
+            Vec2 ballP = rot(s * 0.1f + sinf(t * 2.f) * 4.f, -s * 0.55f);
+            _draw->drawDot(ballP, 9.f, Color(0.15f, 0.45f, 1.f, 1.f));
+            _draw->drawDot(Vec2(ballP.x - 2.5f, ballP.y + 3.f), 3.f, Color(1.f, 1.f, 1.f, 0.9f));
+            _draw->drawCircle(rot(s * 0.55f, s * 0.55f), 9.f, ink, 3.f);
+        }
+        else
+        {
+            strokeLetter(i == 0 ? 'B' : 'X', Vec2(x, y), lw, lh, Color(0.f, 0.f, 0.f, 0.12f), 14.f);   // Schatten
+            strokeLetter(i == 0 ? 'B' : 'X', Vec2(x, y + 3.f), lw, lh, ink, 10.f);
+        }
+    }
+
+    // Karten: links ein Ball, rechts Fluid
+    for (int m = 0; m < 2; ++m)
+    {
+        bool sel    = (int)_mode == m;
+        float pulse = sel ? 1.f + 0.03f * sinf(t * 4.f) : 1.f;
+        Vec2 c(m == 0 ? 175.f : 465.f, 320.f + (sel ? 6.f : 0.f));
+        Vec2 half(100.f * pulse, 120.f * pulse);
+        roundedRect(Vec2(c.x + 4, c.y - 6), half, 22.f, Color(0.f, 0.f, 0.2f, 0.12f), Color(0, 0, 0, 0), 0.f);   // Schatten
+        roundedRect(c, half, 22.f, sel ? Color(1.f, 1.f, 1.f, 1.f) : Color(0.90f, 0.93f, 0.98f, 1.f),
+                    sel ? Color(0.15f, 0.45f, 1.f, 1.f) : Color(0.62f, 0.70f, 0.85f, 1.f), sel ? 4.f : 2.f);
+        if (m == 0)
+        {
+            float b = sel ? fabsf(sinf(t * 3.5f)) * 22.f : 0.f;                       // Ball huepft, wenn gewaehlt
+            Vec2 p(c.x, c.y + 10.f + b);
+            _draw->drawDot(Vec2(c.x, c.y - 34.f), 28.f - b * 0.35f, Color(0.f, 0.f, 0.f, 0.10f));   // Schatten am Boden
+            _draw->drawDot(p, 38.f, Color(0.08f, 0.14f, 0.35f, 1.f));
+            _draw->drawDot(Vec2(p.x - 4.f, p.y + 4.f), 32.f, Color(0.12f, 0.30f, 0.75f, 1.f));
+            _draw->drawDot(Vec2(p.x - 10.f, p.y + 11.f), 16.f, Color(0.45f, 0.70f, 1.f, 1.f));
+            _draw->drawDot(Vec2(p.x - 13.f, p.y + 14.f), 6.f, Color(1.f, 1.f, 1.f, 0.9f));
+        }
+        drawDigit(m + 1, Vec2(c.x - 8.f, c.y - 98.f), 8.f);
+    }
+
+    // Fluid-Icon: wabbelnder Metaball-Tropfen (gleiche Technik wie im Spiel)
+    {
+        const bool sel = _mode == Mode::Fluid;
+        Vec2 c(465.f, 326.f + (sel ? 6.f : 0.f));
+        std::vector<MBPoint> pts;
+        for (int r = 0; r < 3; ++r)
+            for (int k = 0; k < 5; ++k)
+            {
+                float w = sel ? 1.f : 0.25f;
+                pts.push_back({Vec2(c.x - 48.f + k * 24.f + sinf(t * 2.5f + k * 1.1f + r) * 5.f * w,
+                                    c.y - 24.f + r * 22.f + sinf(t * 3.1f + k * 0.9f + r * 2.f) * 6.f * w),
+                               1.f});
+            }
+        // ein Tropfen loest sich und faellt
+        float ph = fmodf(t * 0.7f, 1.f);
+        if (sel) pts.push_back({Vec2(c.x + 10.f, c.y + 46.f - ph * ph * 90.f), 0.55f + 0.2f * (1.f - ph)});
+        MBPalette pal{{kWater[0], kWater[1], kWater[2], kWater[3]}, {0.28f, 0.45f, 0.80f, 1.35f},
+                      Color(0.75f, 0.90f, 1.f, 1.f), Color(1.f, 1.f, 1.f, 1.f), true};
+        renderMetaballs(pts, pal);
+    }
+
+    // Level-Auswahl (Hoch/Runter): Karte mit Zahl, Pfeilen und Fortschrittspunkten
+    roundedRect(Vec2(cx, 105.f), Vec2(190.f, 62.f), 18.f, Color(1.f, 1.f, 1.f, 1.f), Color(0.62f, 0.70f, 0.85f, 1.f), 2.f);
+    drawNumber(_menuLevel, Vec2(cx - (_menuLevel >= 10 ? 16.f : 8.f), 100.f), 8.f);
+    float bob = sinf(t * 4.f) * 2.f;
+    _draw->drawSolidTriangle(Vec2(cx - 9, 138 + bob), Vec2(cx + 9, 138 + bob), Vec2(cx, 152 + bob), ink, ink, 1.f);
+    _draw->drawSolidTriangle(Vec2(cx - 9, 92 - bob), Vec2(cx + 9, 92 - bob), Vec2(cx, 78 - bob), ink, ink, 1.f);
+    for (int i = 1; i <= kLevels; ++i)
+    {
+        Vec2 d(cx - 7 * kLevels + i * 14 - 7, 66);
+        if (i == _menuLevel) _draw->drawDot(d, 4.f, Color(0.15f, 0.45f, 1.f, 1.f));
+        else _draw->drawCircle(d, 3.f, ink, 1.f);
+    }
+}
+
+// Metaballs nur mit DrawNode: Skalarfelder aus Kernen auf einem Raster, Iso-Konturen per Marching Squares.
+// Koerper: 4 Schichten fuer Tiefe. Glanz (optional): eigenes, kleineres, nach oben-links versetztes Metaball-Feld.
+void BoxScene::renderMetaballs(const std::vector<MBPoint>& pts, const MBPalette& pal)
 {
     constexpr float cell = 4.f;                 // Rasterweite in Pixeln
     constexpr int N      = (int)(kWin / cell) + 2;
     static std::vector<float> body, shine;
     body.assign(N * N, 0.f);
-    shine.assign(N * N, 0.f);
+    if (pal.shine) shine.assign(N * N, 0.f);
 
     int minX = N, minY = N, maxX = 0, maxY = 0;
     auto splat = [&](std::vector<float>& f, Vec2 p, float R) {
@@ -532,11 +626,10 @@ void BoxScene::drawMetaballs()
             }
     };
 
-    for (b2BodyId id : _parts)
+    for (const MBPoint& m : pts)
     {
-        Vec2 p = px(toV(b2Body_GetPosition(id)));
-        splat(body, p, 20.f);
-        splat(shine, Vec2(p.x - 3.f, p.y + 4.f), 9.f);   // Lichtquelle oben links (y nach oben)
+        splat(body, m.p, 20.f * m.s);
+        if (pal.shine) splat(shine, Vec2(m.p.x - 3.f * m.s, m.p.y + 4.f * m.s), 9.f * m.s);   // Licht oben links
     }
     if (minX > maxX) return;
 
@@ -569,15 +662,23 @@ void BoxScene::drawMetaballs()
             }
     };
 
-    // Koerper: von aussen (dunkel) nach innen (hell)
-    layer(body, 0.28f, Color(0.03f, 0.14f, 0.52f, 1.f));   // Rand
-    layer(body, 0.45f, Color(0.07f, 0.30f, 0.85f, 1.f));   // tief
-    layer(body, 0.80f, Color(0.18f, 0.52f, 1.00f, 1.f));   // Mitte
-    layer(body, 1.35f, Color(0.42f, 0.74f, 1.00f, 1.f));   // Kern
+    for (int i = 0; i < 4; ++i) layer(body, pal.t[i], pal.c[i]);   // von aussen (dunkel) nach innen (hell)
+    if (pal.shine)
+    {
+        layer(shine, 0.40f, pal.soft);   // weicher Schein
+        layer(shine, 0.85f, pal.core);   // heller Kern (fliesst bei nahen Partikeln zusammen)
+    }
+}
 
-    // Glanz als Metaballs: weicher Schein + heller Kern (fliesst bei nahen Partikeln zusammen)
-    layer(shine, 0.40f, Color(0.75f, 0.90f, 1.00f, 1.f));
-    layer(shine, 0.85f, Color(1.00f, 1.00f, 1.00f, 1.f));
+void BoxScene::drawMetaballs()
+{
+    std::vector<MBPoint> pts;
+    pts.reserve(_parts.size());
+    for (b2BodyId id : _parts)
+        pts.push_back({px(toV(b2Body_GetPosition(id))), 1.f});
+    MBPalette pal{{kWater[0], kWater[1], kWater[2], kWater[3]}, {0.28f, 0.45f, 0.80f, 1.35f},
+                  Color(0.75f, 0.90f, 1.f, 1.f), Color(1.f, 1.f, 1.f, 1.f), true};
+    renderMetaballs(pts, pal);
 }
 
 // Sicherheitsnetz: Ball/Partikel duerfen den Kasten nie verlassen. Liegt ein Koerper ausserhalb des Rahmens

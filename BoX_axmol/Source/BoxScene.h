@@ -21,7 +21,13 @@ private:
     void enforceBounds();
     void startGame();
     void stepFluid();
-    void drawMetaballs();
+    void drawMetaballs();                 // Fluid im Spiel
+    struct MBPoint { ax::Vec2 p; float s; };                       // Position (px) + Groessenfaktor (1 = 20 px Kern)
+    struct MBPalette { ax::Color c[4]; float t[4]; ax::Color soft, core; bool shine; };
+    void renderMetaballs(const std::vector<MBPoint>& pts, const MBPalette& pal);
+    void fillRect(ax::Vec2 lo, ax::Vec2 hi, const ax::Color& col);
+    void roundedRect(ax::Vec2 c, ax::Vec2 half, float r, const ax::Color& fill, const ax::Color& border, float thick);
+    void strokeLetter(char ch, ax::Vec2 o, float w, float h, const ax::Color& col, float thick);
     int countParticlesInGoal() const;
     void drawDigit(int digit, ax::Vec2 pos, float size);
     void drawTime(long ms, ax::Vec2 pos);
