@@ -574,3 +574,26 @@ void BoxScene::drawMetaballs()
         _draw->drawDot(Vec2(p.x - 2.f, p.y + 2.5f), 2.2f, Color(1.f, 1.f, 1.f, 0.55f));
     }
 }
+
+// Sicherheitsnetz: Ball/Partikel duerfen den Kasten nie verlassen. Liegt ein Koerper ausserhalb des Rahmens
+// (z.B. durch extreme Drehung), wird er in Container-Koordinaten zurueck in den Kasten gesetzt.
+void BoxScene::enforceBounds()
+{
+    auto fix = [&](b2BodyId id, float r) {
+        b2Vec2 l = toV(b2Body_GetLocalPoint(_boxBody, b2Body_GetPosition(id)));
+        const float lim = kInner - r;
+        if (std::abs(l.x) <= lim && std::abs(l.y) <= lim) return;
+        b2Vec2 cl{std::max(-lim, std::min(lim, l.x)), std::max(-lim, std::min(lim, l.y))};
+        b2Vec2 w = toV(b2Body_GetWorldPoint(_boxBody, cl));
+        b2Body_SetTransform(id, {w.x, w.y}, b2Body_GetRotation(id));
+        b2Body_SetLinearVelocity(id, b2Body_GetWorldPointVelocity(_boxBody, {w.x, w.y}));
+    };
+    if (B2_IS_NON_NULL(_ball)) fix(_ball, kBallR);
+    for (b2BodyId id : _parts) fix(id, kPartR);
+}
+
+void BoxScene::drawNumber(int n, Vec2 pos, float size)
+{
+    std::string s = std::to_string(n);
+    for (char ch : s) { drawDigit(ch - '0', pos, size); pos.x += size + 8; }
+}
