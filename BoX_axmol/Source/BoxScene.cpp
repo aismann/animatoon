@@ -374,6 +374,7 @@ void BoxScene::update(float dt)
 {
     if (_state == State::Editor)
     {
+        _menuT += dt;
         drawEditor();
         return;
     }
@@ -928,7 +929,21 @@ void BoxScene::drawEditor()
 
     // Startbereich von Ball/Fluid: obere Leiste (Waende hier vermeiden)
     fillRect(S(-200, -150), S(200, -200), Color(1.f, 0.9f, 0.85f, 1.f));
-    _draw->drawCircle(S(180, -170), 20.f, Color(0.9f, 0.5f, 0.3f, 1.f), 2.f);
+    {   // Startpunkt: kleiner Ball mit Glanz, gestrichelter Ring und Pfeil nach unten
+        Vec2 s = S(180, -170);
+        for (int i = 0; i < 16; i += 2)
+        {
+            float a0 = i * 3.14159265f / 8.f, a1 = (i + 1) * 3.14159265f / 8.f;
+            _draw->drawLine(Vec2(s.x + cosf(a0) * 24.f, s.y + sinf(a0) * 24.f),
+                            Vec2(s.x + cosf(a1) * 24.f, s.y + sinf(a1) * 24.f), Color(0.85f, 0.45f, 0.2f, 1.f), 2.f);
+        }
+        _draw->drawDot(s, 16.f, Color(0.08f, 0.14f, 0.35f, 1.f));
+        _draw->drawDot(Vec2(s.x - 2.f, s.y + 2.f), 13.f, Color(0.12f, 0.30f, 0.75f, 1.f));
+        _draw->drawDot(Vec2(s.x - 5.f, s.y + 5.f), 6.f, Color(0.45f, 0.70f, 1.f, 1.f));
+        _draw->drawDot(Vec2(s.x - 6.f, s.y + 6.f), 2.5f, Color(1.f, 1.f, 1.f, 0.9f));
+        _draw->drawSolidTriangle(Vec2(s.x - 7.f, s.y - 28.f), Vec2(s.x + 7.f, s.y - 28.f), Vec2(s.x, s.y - 38.f),
+                                 Color(0.85f, 0.45f, 0.2f, 1.f), Color(0.85f, 0.45f, 0.2f, 1.f), 1.f);
+    }
 
     for (int g = -200; g <= 200; g += 20)   // Raster
     {
@@ -940,19 +955,48 @@ void BoxScene::drawEditor()
     const LevelData& L = _levels[_level];
     const Vec2 q[4]    = {S(-200, -200), S(-200, 200), S(200, 200), S(200, -200)};
     for (int i = 0; i < 4; ++i) _draw->drawLine(q[i], q[(i + 1) & 3], ink, 5.f);
-    for (const auto& s : L.segs) _draw->drawLine(S(s[0], s[1]), S(s[2], s[3]), ink, 5.f);
-
-    _draw->drawDot(S(L.gx, L.gy), 16.f, Color(0.2f, 0.75f, 0.35f, 0.45f));   // Ziel
-    _draw->drawCircle(S(L.gx, L.gy), 16.f, Color(0.1f, 0.5f, 0.2f, 1.f), 3.f);
-
-    if (_drag)   // Vorschau der gezogenen Wand
+    for (const auto& s : L.segs)
     {
-        _draw->drawLine(S(_dragA.x, _dragA.y), S(_dragB.x, _dragB.y), accent, 5.f);
-        _draw->drawDot(S(_dragA.x, _dragA.y), 5.f, accent);
-        _draw->drawDot(S(_dragB.x, _dragB.y), 5.f, accent);
+        _draw->drawLine(S(s[0], s[1]), S(s[2], s[3]), ink, 5.f);
+        for (int e = 0; e < 2; ++e)   // Endpunkte: runde Kappe mit hellem Kern
+        {
+            Vec2 p = S(s[e * 2], s[e * 2 + 1]);
+            _draw->drawDot(p, 5.f, ink);
+            _draw->drawDot(p, 2.2f, Color(0.75f, 0.85f, 1.f, 1.f));
+        }
+    }
+
+    {   // Ziel: pulsierende Zielscheibe (Ringe) mit Mittelpunkt
+        Vec2 g   = S(L.gx, L.gy);
+        float pu = 0.5f + 0.5f * sinf(_menuT * 4.f);
+        const Color gr(0.1f, 0.55f, 0.25f, 1.f);
+        _draw->drawDot(g, 16.f, Color(0.2f, 0.75f, 0.35f, 0.35f));
+        _draw->drawCircle(g, 16.f, gr, 3.f);
+        _draw->drawCircle(g, 9.f, gr, 2.f);
+        _draw->drawDot(g, 3.5f, gr);
+        _draw->drawCircle(g, 20.f + 5.f * pu, Color(0.1f, 0.55f, 0.25f, 0.5f * (1.f - pu)), 2.f);
+    }
+
+    if (_drag)   // Vorschau der gezogenen Wand: Start gruen, Ende blau (pulsierend), Laenge im Raster
+    {
+        float pu = 0.5f + 0.5f * sinf(_menuT * 8.f);
+        _draw->drawLine(S(_dragA.x, _dragA.y), S(_dragB.x, _dragB.y), Color(0.15f, 0.45f, 1.f, 0.55f), 5.f);
+        Vec2 a = S(_dragA.x, _dragA.y), b = S(_dragB.x, _dragB.y);
+        _draw->drawDot(a, 7.f, Color(0.2f, 0.75f, 0.35f, 1.f));
+        _draw->drawCircle(a, 10.f, Color(1.f, 1.f, 1.f, 1.f), 2.f);
+        _draw->drawDot(b, 7.f, accent);
+        _draw->drawCircle(b, 10.f + 3.f * pu, Color(0.15f, 0.45f, 1.f, 1.f - 0.6f * pu), 2.f);
     }
     else
-        _draw->drawCircle(S(_cursor.x, _cursor.y), 6.f, _tool == 2 ? Color(0.9f, 0.2f, 0.2f, 1.f) : accent, 2.f);
+    {   // Fadenkreuz am Raster-Cursor
+        Vec2 p = S(_cursor.x, _cursor.y);
+        Color cc = _tool == 2 ? Color(0.9f, 0.2f, 0.2f, 1.f) : accent;
+        _draw->drawCircle(p, 7.f, cc, 2.f);
+        _draw->drawLine(Vec2(p.x - 12.f, p.y), Vec2(p.x - 4.f, p.y), cc, 2.f);
+        _draw->drawLine(Vec2(p.x + 4.f, p.y), Vec2(p.x + 12.f, p.y), cc, 2.f);
+        _draw->drawLine(Vec2(p.x, p.y - 12.f), Vec2(p.x, p.y - 4.f), cc, 2.f);
+        _draw->drawLine(Vec2(p.x, p.y + 4.f), Vec2(p.x, p.y + 12.f), cc, 2.f);
+    }
 
     // Werkzeugleiste: Wand / Ziel / Radierer (Ziffer darunter), aktives Werkzeug blau
     for (int i = 0; i < 3; ++i)
