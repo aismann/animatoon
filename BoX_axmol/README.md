@@ -11,7 +11,7 @@ Einbinden in ein Axmol-Projekt (`axmol init -p com.example.box -n BoX`):
 
 Levels 1-14 (1-4 aus dem Original, 5-14 neu: Zickzack, Trichter, Pegs, Trennwand, S-Waende, Tresor, Tunnel, Ring, Slalom, Finale - ungetestet, ggf. Luecken anpassen). 1-4: Level 3 und 4 sind laut Vorlage identisch: Rahmen + Ziel in der Mitte, Ziel-Radius 16). Nach dem Treffer folgt nach 1,5 s das naechste Level, die Zeit startet pro Level neu; oben rechts Level-Ziffer und Fortschrittspunkte.
 
-Menue (nur DrawNode, ohne Text; Titel BOX aus Linienbuchstaben, Hintergrund und Fluid-Icon als Metaballs): links = ein Ball (1), rechts = Fluid (2); Links/Rechts oder 1/2 waehlt,
+Menue (Maus: Karte anklicken startet Ball/Fluid bzw. den Editor, Pfeile/Punkte waehlen das Level; nur DrawNode, ohne Text; Titel BOX aus Linienbuchstaben, Hintergrund und Fluid-Icon als Metaballs): links = ein Ball (1), rechts = Fluid (2); Links/Rechts oder 1/2 waehlt,
 Hoch/Runter waehlt das Start-Level (1-14), Enter/Space startet. Im Spiel bringt Esc zurueck ins Menue, im Menue beendet Esc.
 Fluid: 15 Kreise (3 x 5, r = 6 px), als Metaballs gezeichnet (Marching Squares, nur DrawNode; Glanz ist ein eigenes Metaball-Feld), als Metaballs gezeichnet (Marching Squares, nur DrawNode) mit Viskositaet + Kohaesion (Box2D 3.x hat kein eingebautes Fluid);
 gewonnen, wenn 4 Partikel im Ziel sind.

@@ -108,9 +108,18 @@ bool BoxScene::init()
         if (_state == State::Editor) { editorPointer(0, p, e->getButton()); return true; }
         if (_state == State::Menu)
         {
-            if (p.x > 520 && p.x < 600 && p.y > 85 && p.y < 125) _editorOn = !_editorOn;   // Schalter
-            else if (p.y > 200 && p.y < 440 && p.x < 280) _mode = Mode::Ball;                // Karten
-            else if (p.y > 200 && p.y < 440 && p.x > 360) _mode = Mode::Fluid;
+            auto begin = [this]() { if (_editorOn) startEditor(); else startGame(); };
+            const float cx = kWin / 2;
+            if (p.x > 520 && p.x < 600 && p.y > 85 && p.y < 135) _editorOn = !_editorOn;      // Editor-Schalter
+            else if (p.y > 200 && p.y < 440 && p.x > 75 && p.x < 275) { _mode = Mode::Ball; begin(); }    // Karte: Ball -> Start
+            else if (p.y > 200 && p.y < 440 && p.x > 365 && p.x < 565) { _mode = Mode::Fluid; begin(); }  // Karte: Fluid -> Start
+            else if (std::abs(p.x - cx) < 40 && p.y > 125 && p.y < 165) _menuLevel = _menuLevel % kLevels + 1;            // Pfeil hoch
+            else if (std::abs(p.x - cx) < 40 && p.y > 78 && p.y < 100) _menuLevel = (_menuLevel + kLevels - 2) % kLevels + 1;   // Pfeil runter
+            else if (std::abs(p.y - 66.f) < 9.f)   // Punkte: Level direkt waehlen
+            {
+                int i = (int)std::lround((p.x - (cx - 7.f * kLevels - 7.f)) / 14.f);
+                if (i >= 1 && i <= kLevels) _menuLevel = i;
+            }
         }
         return true;
     };
