@@ -1,0 +1,346 @@
+diff --git a/axmol/platform/android/java/src/dev/axmol/lib/AxmolEditBox.java b/axmol/platform/android/java/src/dev/axmol/lib/AxmolEditBox.java
+index d90871b..61ec8e1 100644
+--- a/axmol/platform/android/java/src/dev/axmol/lib/AxmolEditBox.java
++++ b/axmol/platform/android/java/src/dev/axmol/lib/AxmolEditBox.java
+@@ -237,7 +237,7 @@ public class AxmolEditBox extends AppCompatEditText {
+                 gravity =(gravity & ~Gravity.TOP & ~Gravity.BOTTOM) | Gravity.CENTER_VERTICAL;
+                 break;
+             case kTextVerticalAlignmentBottom:
+-                //TODO: Add appropriate padding when this alignment is used
++                setPadding(padding, 0, 0, padding*3/4);
+                 gravity = (gravity & ~Gravity.TOP) | Gravity.BOTTOM ;
+                 break;
+             default:
+diff --git a/axmol/platform/android/java/src/dev/axmol/lib/EditBoxHelper.java b/axmol/platform/android/java/src/dev/axmol/lib/EditBoxHelper.java
+index 9dd9b38..9ac5240 100644
+--- a/axmol/platform/android/java/src/dev/axmol/lib/EditBoxHelper.java
++++ b/axmol/platform/android/java/src/dev/axmol/lib/EditBoxHelper.java
+@@ -329,6 +329,18 @@ public class EditBoxHelper {
+         });
+     }
+ 
++    public static void setTextVerticalAlignment(final int index, final int alignment) {
++        mActivity.runOnUiThread(new Runnable() {
++            @Override
++            public void run() {
++                AxmolEditBox editBox = mEditBoxArray.get(index);
++                if (editBox != null) {
++                    editBox.setTextVerticalAlignment(alignment);
++                }
++            }
++        });
++    }
++
+     public static void setInputMode(final int index, final int inputMode) {
+         mActivity.runOnUiThread(new Runnable() {
+             @Override
+diff --git a/axmol/ui/EditBox/EditBox.cpp b/axmol/ui/EditBox/EditBox.cpp
+index e449c2d..cf92767 100644
+--- a/axmol/ui/EditBox/EditBox.cpp
++++ b/axmol/ui/EditBox/EditBox.cpp
+@@ -674,6 +674,23 @@ TextHAlignment EditBox::getTextHorizontalAlignment() const
+     return TextHAlignment::LEFT;
+ }
+ 
++void EditBox::setTextVerticalAlignment(TextVAlignment alignment)
++{
++    if (_editBoxImpl != nullptr)
++    {
++        _editBoxImpl->setTextVerticalAlignment(alignment);
++    }
++}
++
++TextVAlignment EditBox::getTextVerticalAlignment() const
++{
++    if (_editBoxImpl != nullptr)
++    {
++        return _editBoxImpl->getTextVerticalAlignment();
++    }
++    return TextVAlignment::CENTER;
++}
++
+ /* override function */
+ void EditBox::setPosition(const Vec2& pos)
+ {
+diff --git a/axmol/ui/EditBox/EditBox.h b/axmol/ui/EditBox/EditBox.h
+index 8983ed1..8d00d3d 100644
+--- a/axmol/ui/EditBox/EditBox.h
++++ b/axmol/ui/EditBox/EditBox.h
+@@ -572,6 +572,21 @@ public:
+      */
+     TextHAlignment getTextHorizontalAlignment() const;
+ 
++    /**
++     * Set the text vertical alignment (TOP, CENTER or BOTTOM).
++     *
++     * If never called, the default behavior is kept: TOP for InputMode::ANY (multi-line), CENTER otherwise.
++     * Applies to the placeholder and to the text shown while the edit box is not being edited. The native
++     * text control is updated on Android and iOS (single-line field); other platforms keep their
++     * native vertical placement while editing.
++     */
++    void setTextVerticalAlignment(TextVAlignment alignment);
++
++    /**
++     * Get the text vertical alignment.
++     */
++    TextVAlignment getTextVerticalAlignment() const;
++
+     /* override functions */
+     void setPosition(const Vec2& pos) override;
+     void setVisible(bool visible) override;
+diff --git a/axmol/ui/EditBox/EditBoxImpl-android.cpp b/axmol/ui/EditBox/EditBoxImpl-android.cpp
+index b78aa6d..59410e1 100644
+--- a/axmol/ui/EditBox/EditBoxImpl-android.cpp
++++ b/axmol/ui/EditBox/EditBoxImpl-android.cpp
+@@ -112,6 +112,13 @@ void EditBoxImplAndroid::setNativeTextHorizontalAlignment(ax::TextHAlignment ali
+                                     static_cast<int>(alignment));
+ }
+ 
++void EditBoxImplAndroid::setNativeTextVerticalAlignment(ax::TextVAlignment alignment)
++{
++    // TextVAlignment: TOP = 0, CENTER = 1, BOTTOM = 2 (matches AxmolEditBox.kTextVerticalAlignment*)
++    JniHelper::callStaticVoidMethod(editBoxClassName, "setTextVerticalAlignment", _editBoxIndex,
++                                    static_cast<int>(alignment));
++}
++
+ bool EditBoxImplAndroid::isEditing()
+ {
+     return _editingMode;
+diff --git a/axmol/ui/EditBox/EditBoxImpl-android.h b/axmol/ui/EditBox/EditBoxImpl-android.h
+index bd6f693..1184b7a 100644
+--- a/axmol/ui/EditBox/EditBoxImpl-android.h
++++ b/axmol/ui/EditBox/EditBoxImpl-android.h
+@@ -48,6 +48,7 @@ public:
+     void setNativeInputFlag(EditBox::InputFlag inputFlag) override;
+     void setNativeReturnType(EditBox::KeyboardReturnType returnType) override;
+     void setNativeTextHorizontalAlignment(ax::TextHAlignment alignment) override;
++    void setNativeTextVerticalAlignment(ax::TextVAlignment alignment) override;
+     void setNativeText(std::string_view text) override;
+     void setNativePlaceHolder(std::string_view text) override;
+     void setNativeVisible(bool visible) override;
+diff --git a/axmol/ui/EditBox/EditBoxImpl-common.cpp b/axmol/ui/EditBox/EditBoxImpl-common.cpp
+index 66645b2..bd7ffe7 100644
+--- a/axmol/ui/EditBox/EditBoxImpl-common.cpp
++++ b/axmol/ui/EditBox/EditBoxImpl-common.cpp
+@@ -122,31 +122,29 @@ void EditBoxImplCommon::placeInactiveLabels(const Vec2& size)
+ {
+     _label->setDimensions(size.width, size.height);
+ 
+-    if (_editBoxInputMode == EditBox::InputMode::ANY)
+-    {
+-        _label->setPosition(Vec2((float)AX_EDIT_BOX_PADDING, size.height - AX_EDIT_BOX_PADDING));
+-        _label->setVerticalAlignment(TextVAlignment::TOP);
+-        _label->enableWrap(true);
++    const TextVAlignment va = effectiveVerticalAlignment();
++    const bool multiline    = _editBoxInputMode == EditBox::InputMode::ANY;
++    const float pad         = (float)AX_EDIT_BOX_PADDING;
+ 
+-        if (_labelPlaceHolder)
+-        {
+-            _labelPlaceHolder->setPosition(Vec2((float)AX_EDIT_BOX_PADDING, size.height - AX_EDIT_BOX_PADDING));
+-            _labelPlaceHolder->setVerticalAlignment(TextVAlignment::TOP);
+-        }
+-    }
+-    else
+-    {
+-        _label->enableWrap(false);
+-        _label->setPosition(Vec2((float)AX_EDIT_BOX_PADDING, size.height));
+-        _label->setVerticalAlignment(TextVAlignment::CENTER);
++    // The label spans the whole box height, so its own vertical alignment does the work.
++    // Multi-line text keeps the top padding when it is top aligned.
++    _label->enableWrap(multiline);
++    _label->setVerticalAlignment(va);
++    _label->setPosition(Vec2(pad, (multiline && va == TextVAlignment::TOP) ? size.height - pad : size.height));
+ 
+-        if (_labelPlaceHolder)
+-        {
+-            auto placeholderSize = _labelPlaceHolder->getContentSize();
+-            _labelPlaceHolder->setPosition(
+-                Vec2((float)AX_EDIT_BOX_PADDING, (size.height + placeholderSize.height) / 2));
+-            _labelPlaceHolder->setVerticalAlignment(TextVAlignment::CENTER);
+-        }
++    if (_labelPlaceHolder)
++    {
++        // The placeholder has no fixed dimensions (top-left anchor), so it is positioned by its own height.
++        const float h = _labelPlaceHolder->getContentSize().height;
++        float y       = size.height;
++        if (va == TextVAlignment::TOP)
++            y = multiline ? size.height - pad : size.height;
++        else if (va == TextVAlignment::CENTER)
++            y = (size.height + h) / 2;
++        else
++            y = h;   // BOTTOM
++        _labelPlaceHolder->setPosition(Vec2(pad, y));
++        _labelPlaceHolder->setVerticalAlignment(va);
+     }
+ }
+ 
+@@ -226,6 +224,8 @@ void EditBoxImplCommon::setInputMode(EditBox::InputMode inputMode)
+ {
+     _editBoxInputMode = inputMode;
+     this->setNativeInputMode(inputMode);
++    if (_vAlignmentSet)   // some native controls reset their vertical placement when the input mode changes
++        this->setNativeTextVerticalAlignment(_vAlignment);
+     this->placeInactiveLabels(applyPadding(_editBox->getContentSize()));
+ }
+ 
+@@ -242,6 +242,15 @@ void EditBoxImplCommon::setTextHorizontalAlignment(ax::TextHAlignment alignment)
+     refreshLabelAlignment();
+ }
+ 
++void EditBoxImplCommon::setTextVerticalAlignment(ax::TextVAlignment alignment)
++{
++    _vAlignment    = alignment;
++    _vAlignmentSet = true;
++    this->setNativeTextVerticalAlignment(alignment);
++    if (_label)
++        this->placeInactiveLabels(applyPadding(_editBox->getContentSize()));
++}
++
+ void EditBoxImplCommon::setInputFlag(EditBox::InputFlag inputFlag)
+ {
+     _editBoxInputFlag = inputFlag;
+diff --git a/axmol/ui/EditBox/EditBoxImpl-common.h b/axmol/ui/EditBox/EditBoxImpl-common.h
+index 0506bf8..c4cd35b 100644
+--- a/axmol/ui/EditBox/EditBoxImpl-common.h
++++ b/axmol/ui/EditBox/EditBoxImpl-common.h
+@@ -51,6 +51,7 @@ public:
+ 
+     void setMaxLength(int maxLength) override;
+     void setTextHorizontalAlignment(TextHAlignment alignment) override;
++    void setTextVerticalAlignment(TextVAlignment alignment) override;
+ 
+     int getMaxLength() override { return _maxLength; }
+     std::string_view getText() override { return _text; }
+@@ -68,6 +69,7 @@ public:
+     EditBox::InputFlag getInputFlag() override { return _editBoxInputFlag; }
+     EditBox::KeyboardReturnType getReturnType() override { return _keyboardReturnType; }
+     TextHAlignment getTextHorizontalAlignment() override { return _alignment; }
++    TextVAlignment getTextVerticalAlignment() override { return effectiveVerticalAlignment(); }
+ 
+     virtual void refreshInactiveText();
+ 
+@@ -105,6 +107,8 @@ public:
+     virtual void setNativeInputFlag(EditBox::InputFlag inputFlag)                  = 0;
+     virtual void setNativeReturnType(EditBox::KeyboardReturnType returnType)       = 0;
+     virtual void setNativeTextHorizontalAlignment(ax::TextHAlignment alignment)    = 0;
++    /** Optional: platforms whose native control supports it override this (default: no-op). */
++    virtual void setNativeTextVerticalAlignment(ax::TextVAlignment alignment) {}
+     virtual void setNativeText(std::string_view text)                              = 0;
+     virtual void setNativePlaceHolder(std::string_view text)                       = 0;
+     virtual void setNativeVisible(bool visible)                                    = 0;
+@@ -118,6 +122,12 @@ protected:
+     void initInactiveLabels(const Size& size);
+     void setInactiveText(std::string_view text);
+     void refreshLabelAlignment();
++    TextVAlignment effectiveVerticalAlignment() const
++    {
++        if (_vAlignmentSet)
++            return _vAlignment;
++        return _editBoxInputMode == EditBox::InputMode::ANY ? TextVAlignment::TOP : TextVAlignment::CENTER;
++    }
+     void placeInactiveLabels(const Size& size);
+     Label* ensurePlaceholderLabel();
+     void ensurePlaceholderIfNeeded();
+@@ -129,6 +139,8 @@ protected:
+     EditBox::InputFlag _editBoxInputFlag;
+     EditBox::KeyboardReturnType _keyboardReturnType;
+     TextHAlignment _alignment;
++    TextVAlignment _vAlignment = TextVAlignment::CENTER;
++    bool _vAlignmentSet        = false;   // false: TOP for multi-line, CENTER otherwise (legacy behavior)
+ 
+     std::string _text;
+     std::string _placeHolder;
+diff --git a/axmol/ui/EditBox/EditBoxImpl-ios.h b/axmol/ui/EditBox/EditBoxImpl-ios.h
+index 6a48422..1b6d750 100644
+--- a/axmol/ui/EditBox/EditBoxImpl-ios.h
++++ b/axmol/ui/EditBox/EditBoxImpl-ios.h
+@@ -47,6 +47,7 @@ public:
+     void setNativeInputFlag(EditBox::InputFlag inputFlag) override;
+     void setNativeReturnType(EditBox::KeyboardReturnType returnType) override;
+     void setNativeTextHorizontalAlignment(ax::TextHAlignment alignment) override;
++    void setNativeTextVerticalAlignment(ax::TextVAlignment alignment) override;
+     void setNativeText(std::string_view text) override;
+     void setNativePlaceHolder(std::string_view text) override;
+     void setNativeVisible(bool visible) override;
+diff --git a/axmol/ui/EditBox/EditBoxImpl-ios.mm b/axmol/ui/EditBox/EditBoxImpl-ios.mm
+index 6c46bab..c6e16b8 100644
+--- a/axmol/ui/EditBox/EditBoxImpl-ios.mm
++++ b/axmol/ui/EditBox/EditBoxImpl-ios.mm
+@@ -132,6 +132,11 @@ void EditBoxImplIOS::setNativeTextHorizontalAlignment(ax::TextHAlignment alignme
+     [_systemControl setTextHorizontalAlignment:alignment];
+ }
+ 
++void EditBoxImplIOS::setNativeTextVerticalAlignment(ax::TextVAlignment alignment)
++{
++    [_systemControl setTextVerticalAlignment:alignment];
++}
++
+ void EditBoxImplIOS::setNativeText(std::string_view text)
+ {
+     NSString* nsText = [[NSString alloc] initWithBytes:text.data() length:text.length() encoding:NSUTF8StringEncoding];
+diff --git a/axmol/ui/EditBox/EditBoxImpl.h b/axmol/ui/EditBox/EditBoxImpl.h
+index f6e7eb0..559afad 100644
+--- a/axmol/ui/EditBox/EditBoxImpl.h
++++ b/axmol/ui/EditBox/EditBoxImpl.h
+@@ -41,6 +41,7 @@ public:
+     virtual int getMaxLength()                                               = 0;
+     virtual void setTextHorizontalAlignment(TextHAlignment alignment)        = 0;
+     virtual void setReturnType(EditBox::KeyboardReturnType returnType)       = 0;
++    virtual void setTextVerticalAlignment(TextVAlignment alignment) {}
+     virtual bool isEditing()                                                 = 0;
+ 
+     virtual void setText(std::string_view text)        = 0;
+@@ -60,6 +61,7 @@ public:
+     virtual EditBox::InputFlag getInputFlag()           = 0;
+     virtual EditBox::KeyboardReturnType getReturnType() = 0;
+     virtual TextHAlignment getTextHorizontalAlignment() = 0;
++    virtual TextVAlignment getTextVerticalAlignment() { return TextVAlignment::CENTER; }
+ 
+     virtual void doAnimationWhenKeyboardMove(float duration, float distance) = 0;
+ 
+diff --git a/axmol/ui/EditBox/iOS/EditBoxIOS.h b/axmol/ui/EditBox/iOS/EditBoxIOS.h
+index a680394..8428f42 100644
+--- a/axmol/ui/EditBox/iOS/EditBoxIOS.h
++++ b/axmol/ui/EditBox/iOS/EditBoxIOS.h
+@@ -37,6 +37,7 @@
+ - (void)setInputFlag:(ax::ui::EditBox::InputFlag)flag;
+ - (void)setReturnType:(ax::ui::EditBox::KeyboardReturnType)returnType;
+ - (void)setTextHorizontalAlignment:(ax::TextHAlignment)alignment;
++- (void)setTextVerticalAlignment:(ax::TextVAlignment)alignment;
+ 
+ - (void)setPlaceHolder:(NSString*)text;
+ - (void)setPlaceholderFont:(UIFont*)font;
+diff --git a/axmol/ui/EditBox/iOS/EditBoxIOS.mm b/axmol/ui/EditBox/iOS/EditBoxIOS.mm
+index 319c5da..6c2669c 100644
+--- a/axmol/ui/EditBox/iOS/EditBoxIOS.mm
++++ b/axmol/ui/EditBox/iOS/EditBoxIOS.mm
+@@ -252,6 +252,28 @@
+     self.textInput.axui_alignment = static_cast<NSTextAlignment>(alignment);
+ }
+ 
++- (void)setTextVerticalAlignment:(ax::TextVAlignment)alignment
++{
++    // UITextField supports contentVerticalAlignment directly. UITextView (multi-line) is top aligned by
++    // design; its vertical placement is handled by the text container inset in a follow-up if needed.
++    if ([self.textInput isKindOfClass:[UITextField class]])
++    {
++        UITextField* field = (UITextField*)self.textInput;
++        switch (alignment)
++        {
++        case ax::TextVAlignment::TOP:
++            field.contentVerticalAlignment = UIControlContentVerticalAlignmentTop;
++            break;
++        case ax::TextVAlignment::BOTTOM:
++            field.contentVerticalAlignment = UIControlContentVerticalAlignmentBottom;
++            break;
++        default:
++            field.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
++            break;
++        }
++    }
++}
++
+ - (void)setText:(NSString*)text
+ {
+     self.textInput.axui_text = text;
