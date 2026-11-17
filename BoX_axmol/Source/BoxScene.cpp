@@ -543,10 +543,9 @@ void BoxScene::drawTime(long ms, Vec2 pos)
 
 namespace
 {
-// Niedriger Alpha-Wert: die vier Schichten liegen uebereinander, innen addiert sich die Deckkraft (Rand duenn, Kern dicht).
-constexpr float kWaterAlpha = 0.32f;
-const Color kWater[4] = {Color(0.03f, 0.14f, 0.52f, kWaterAlpha), Color(0.07f, 0.30f, 0.85f, kWaterAlpha),
-                         Color(0.18f, 0.52f, 1.00f, kWaterAlpha), Color(0.42f, 0.74f, 1.00f, kWaterAlpha)};
+// Wasser: Verlauf Rand -> Kern per Eckenfarben (drawColoredTriangle). Alpha steigt zum Kern: Rand durchsichtig, Kern dichter.
+const Color kWater[4] = {Color(0.03f, 0.14f, 0.52f, 0.28f), Color(0.07f, 0.30f, 0.85f, 0.40f),
+                         Color(0.18f, 0.52f, 1.00f, 0.52f), Color(0.42f, 0.74f, 1.00f, 0.66f)};
 }
 
 void BoxScene::fillRect(Vec2 lo, Vec2 hi, const Color& col)
@@ -609,7 +608,7 @@ void BoxScene::drawMenu()
                           2.2f + 0.5f * sinf(t * 0.5f + i)});
         MBPalette pal{{Color(0.70f, 0.82f, 0.98f, 1.f), Color(0.74f, 0.85f, 0.99f, 1.f), Color(0.79f, 0.89f, 1.f, 1.f),
                        Color(0.84f, 0.92f, 1.f, 1.f)},
-                      {0.30f, 0.50f, 0.85f, 1.40f}, Color(), Color(), false, 8.f, 3.f};
+                      {0.30f, 0.50f, 0.85f, 1.40f}, Color(), Color(), false, 8.f, 3.f, {0.f, 6.f, 14.f, 24.f}};
         renderMetaballs(bg, pal);
     }
 
@@ -750,22 +749,26 @@ void BoxScene::renderMetaballs(const std::vector<MBPoint>& pts, const MBPalette&
     }
     if (minX > maxX) return;
 
-    // Clipper2: Zellen -> Union -> Closing + Chaikin -> Delaunay-Dreiecke. Die Dreiecke ueberlappen nicht,
-    // deshalb funktionieren auch halbtransparente Schichten ohne Doppelblending.
-    const Color none(0.f, 0.f, 0.f, 0.f);
-    auto layer = [&](const std::vector<float>& f, float T, const Color& col) {
-        static mb::Mesh mesh;
-        if (!mb::buildMesh(f, N, cell, minX, minY, maxX, maxY, T, pal.smooth, 1, mesh)) return;
-        for (const auto& t : mesh.tris)
-            _draw->drawSolidTriangle(Vec2((float)t[0].x, (float)t[0].y), Vec2((float)t[1].x, (float)t[1].y),
-                                     Vec2((float)t[2].x, (float)t[2].y), col, none, 0.f);
+    // Clipper2: Zellen -> Union -> Closing -> Ringe (Offset nach innen) -> Baender (Difference) -> Delaunay-Dreiecke.
+    // Jede Dreiecksecke kennt ihren Ring und bekommt dessen Farbe: drawColoredTriangle zeichnet den Verlauf
+    // Rand -> Kern, die Dreiecke ueberlappen nicht (halbtransparent ohne Doppelblending).
+    auto shaded = [&](const std::vector<float>& f, float T, const std::vector<double>& insets, const Color* cols) {
+        static std::vector<mb::ColTri> tris;
+        if (!mb::buildShaded(f, N, cell, minX, minY, maxX, maxY, T, pal.smooth, 0, insets, tris)) return;
+        for (const mb::ColTri& t : tris)
+        {
+            const Vec2 v[3] = {Vec2((float)t.p[0].x, (float)t.p[0].y), Vec2((float)t.p[1].x, (float)t.p[1].y),
+                               Vec2((float)t.p[2].x, (float)t.p[2].y)};
+            const Color c3[3] = {cols[t.ring[0]], cols[t.ring[1]], cols[t.ring[2]]};
+            _draw->drawColoredTriangle(v, c3);
+        }
     };
 
-    for (int i = 0; i < 4; ++i) layer(body, pal.t[i], pal.c[i]);   // von aussen (dunkel) nach innen (hell)
+    shaded(body, pal.t[0], {pal.inset[0], pal.inset[1], pal.inset[2], pal.inset[3]}, pal.c);
     if (pal.shine)
     {
-        layer(shine, 0.40f, pal.soft);   // weicher Schein
-        layer(shine, 0.85f, pal.core);   // heller Kern (fliesst bei nahen Partikeln zusammen)
+        const Color sc[2] = {pal.soft, pal.core};   // weicher Schein -> heller Kern
+        shaded(shine, 0.40f, {0.0, 3.0}, sc);
     }
 }
 

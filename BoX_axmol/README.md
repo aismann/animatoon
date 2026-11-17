@@ -42,3 +42,7 @@ Level-Editor (nur DrawNode): im Menue mit **E** oder per Mausklick den Schalter 
 - Die orange Leiste oben ist der Startbereich von Ball/Fluid - dort keine Waende setzen.
 - Gespeichert wird bei jeder Aenderung in `box_levels.txt` im beschreibbaren Pfad (`FileUtils::getWritablePath()`);
   beim Start ueberschreiben diese Levels die eingebauten.
+
+Wasser-Verlauf: `drawColoredTriangle` mit Eckenfarben. `mb::buildShaded()` (MetaballMesh.h) erzeugt per Clipper2 Ringe
+(`InflatePaths` nach innen), Baender (`Difference`) und Delaunay-Dreiecke; jede Ecke kennt ihren Ring und bekommt dessen Farbe
+(`kWater[0..3]`, Alpha steigt zum Kern). Ring-Abstaende: `MBPalette::inset` (Standard 0 / 3,5 / 8 / 13 px).
