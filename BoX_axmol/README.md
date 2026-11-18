@@ -76,5 +76,5 @@ Einstellungen am Anfang von `BoxScene.cpp`: `kTiltGain` (Empfindlichkeit), `kTil
 die Richtung verkehrt herum meldet). Das Mapping nimmt Hochformat an (x-Achse = rechts); im Querformat musst du ggf. die Achse tauschen.
 Am Desktop gibt es keinen Sensor - dort bleibt die Neigung 0.
 
-Gewinnen: Der Ball gewinnt, sobald er das Ziel beruehrt (Kreise ueberlappen: Ball r 20 + Ziel r 16 px), beim Schleim reichen `kFluidWin`
+Gewinnen: Der Ball gewinnt, sobald der Abstand der Mitten kleiner als Zielradius + 2 x Ballradius ist (16 + 40 = 56 px), beim Schleim reichen `kFluidWin`
 Partikel im Ziel. Geprueft wird nach jedem Physik-Substep (3 pro Frame), damit schnelle Koerper nicht am Ziel vorbeirutschen.

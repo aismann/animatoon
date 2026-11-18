@@ -407,14 +407,14 @@ int BoxScene::countParticlesInGoal() const
     return cnt;
 }
 
-// Gewonnen, sobald der Ball das Ziel beruehrt: Kreise (Ball r 20 px, Ziel r 16 px) ueberlappen. Beim Schleim reicht
+// Gewonnen, sobald der Ball dem Ziel nahe kommt: Abstand der Mitten < Zielradius + 2 x Ballradius (16 + 40 = 56 px). Beim Schleim reicht
 // kFluidWin Partikel im Ziel. Frueher musste die Ballmitte in einem 23-px-Quadrat liegen - das Beruehren reichte nicht.
 bool BoxScene::goalTouched() const
 {
     if (_mode == Mode::Fluid) return countParticlesInGoal() >= kFluidWin;
     b2Vec2 g = toV(b2Body_GetWorldPoint(_boxBody, _goalLocal));
     b2Vec2 d = b2Sub(toV(b2Body_GetPosition(_ball)), g);
-    const float rr = _goalR + kBallR;
+    const float rr = _goalR + kBallR * 2.f;
     return d.x * d.x + d.y * d.y < rr * rr;
 }
 
