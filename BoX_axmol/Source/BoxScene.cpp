@@ -18,6 +18,8 @@ constexpr float kTiltGain = 12.f;                // rad/s pro g Neigung (0,5 g ~
 constexpr float kTiltDead = 0.05f;               // Totzone in g
 constexpr float kTiltSign = 1.f;                 // -1, falls das Geraet die Neigung verkehrt herum meldet
 constexpr float kLineW   = 9.f;                  // GEZEICHNETE Liniendicke in px (nur Optik; Physik bleibt bei kWallR = 5 px)
+constexpr float kMetaBaseR  = 20.f;              // Basis-Kernradius der Metaballs in px (Skalierung 1)
+constexpr float kFluidDrawR = 14.f;              // GLOBAL: Kernradius des gezeichneten Schleims im Spiel in px (kleiner = kleinere Kreise)
 constexpr float kMaxW    = 8.f;                 // max. Winkelgeschwindigkeit des Kastens (rad/s)
 constexpr float kPartR   = 2.f / kPPM;
 constexpr int   kFluidWin = 1;                  // Partikel im Ziel zum Gewinnen
@@ -862,7 +864,7 @@ void BoxScene::renderMetaballs(const std::vector<MBPoint>& pts, const MBPalette&
 
     for (const MBPoint& m : pts)
     {
-        splat(body, m.p, 20.f * m.s);
+        splat(body, m.p, kMetaBaseR * m.s);
         if (pal.shine) splat(shine, Vec2(m.p.x - 3.f * m.s, m.p.y + 4.f * m.s), 9.f * m.s);   // Licht oben links
     }
     if (minX > maxX) return;
@@ -892,12 +894,14 @@ void BoxScene::renderMetaballs(const std::vector<MBPoint>& pts, const MBPalette&
 
 void BoxScene::drawMetaballs()
 {
+    const float s = kFluidDrawR / kMetaBaseR;   // Groesse relativ zum Basis-Kernradius
     std::vector<MBPoint> pts;
     pts.reserve(_parts.size());
     for (b2BodyId id : _parts)
-        pts.push_back({px(toV(b2Body_GetPosition(id))), 1.f});
+        pts.push_back({px(toV(b2Body_GetPosition(id))), s});
+    // Ringabstaende (Rand -> Kern) mitskalieren, sonst verschwinden die inneren Ringe bei kleinen Kreisen
     MBPalette pal{{kWater[0], kWater[1], kWater[2], kWater[3]}, {0.28f, 0.45f, 0.80f, 1.35f},
-                  kSlimeSoft, kSlimeCore, _shineOn, 4.f, 1.5f, {0.f, 3.f, 7.f, 12.f}};
+                  kSlimeSoft, kSlimeCore, _shineOn, 4.f, 1.5f, {0.f, 3.f * s, 7.f * s, 12.f * s}};
     renderMetaballs(pts, pal);
 }
 

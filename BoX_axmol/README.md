@@ -78,3 +78,6 @@ Am Desktop gibt es keinen Sensor - dort bleibt die Neigung 0.
 
 Gewinnen: Der Ball gewinnt, sobald der Abstand der Mitten kleiner als Zielradius + 2 x Ballradius ist (16 + 40 = 56 px), beim Schleim reichen `kFluidWin`
 Partikel im Ziel. Geprueft wird nach jedem Physik-Substep (3 pro Frame), damit schnelle Koerper nicht am Ziel vorbeirutschen.
+
+Schleim-Groesse: globale Konstante `kFluidDrawR` (Anfang von `BoxScene.cpp`, Standard 14 px; vorher 20 px) = Kernradius der gezeichneten
+Metaball-Kreise im Spiel. Kleiner = kleinere Kreise; Ringabstaende und Glanz skalieren mit. Die Physik (`kPartR`) bleibt unveraendert.
