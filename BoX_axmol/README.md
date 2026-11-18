@@ -97,3 +97,8 @@ Build-Stempel: unten links im Menue steht eine kleine Zahl `TTHHMM` (Tag + Uhrze
 
 Werbung (nur Android, Google AdMob): siehe `android/README.md` (Patch fuer `proj.android`, `android/AdManager.java`, `Source/Ads.h`).
 Banner im Menue, Vollbild-Anzeige nach jedem 3. gewonnenen Level; Schalter in `Source/Ads.h`. Es sind Googles Test-IDs eingetragen.
+
+Tropfen fallen nicht mehr durch die Linien: Box2D prueft schnell bewegte kinematische Waende nicht kontinuierlich, ausserdem war die Eckengeschwindigkeit bei
+8 rad/s (r ~ 2,8 m) so hoch, dass Partikel durch die Wand gedrueckt wurden. Gegenmassnahmen (Konstanten am Anfang von `BoxScene.cpp`):
+`kStepsPerFrame = 6` (statt 3 Physikschritte pro Frame), `kMaxW = 4` rad/s (statt 8), `kWallR = 4.5 px` (Wand 9 px dick = gezeichnete Linie) und
+`guardWalls()`: Hat ein Koerper zwischen zwei Schritten die Mittellinie einer Wand gekreuzt, wird er auf seine Seite zurueckgesetzt.

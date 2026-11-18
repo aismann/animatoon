@@ -32,6 +32,7 @@ private:
     void drawLevelPreview(ax::Vec2 c, float size, int level);   // Miniatur des Levels (Menue)
     void drawNumber(int n, ax::Vec2 pos, float size);
     void enforceBounds();
+    void guardWalls();   // Tunnelschutz: Koerper, die zwischen zwei Substeps eine Wand durchquert haben, zurueck auf ihre Seite
     void startGame();
     void stepFluid();
     void drawMetaballs();                 // Fluid im Spiel
@@ -75,6 +76,7 @@ private:
     bool _finished = false;   // alle Levels geschafft
     std::vector<Seg> _segs;
     std::vector<b2BodyId> _parts;   // Fluid-Partikel
+    std::vector<b2Vec2> _prevL;     // lokale Positionen (Container-Koordinaten) vom letzten Substep, fuer guardWalls()
 
     std::vector<LevelData> _levels;   // Index 1..kLevels (eingebaut, ueberschrieben durch gespeicherte Editor-Levels)
     bool _editorOn   = false;         // Schalter im Menue

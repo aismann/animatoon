@@ -8,17 +8,18 @@ namespace
 {
 constexpr float kWin     = 640.f;
 constexpr float kPPM     = 100.f;                // Pixel pro Meter (Box2D rechnet in Metern)
-constexpr float kStep    = 1.f / 60.f / 3.f;     // 3 Substeps pro Frame wie im Original
+constexpr int   kStepsPerFrame = 6;              // Physik-Schritte pro Frame (frueher 3): schnell drehende Waende duerfen nicht durch Partikel "tunneln"
+constexpr float kStep    = 1.f / 60.f / kStepsPerFrame;
 constexpr float kBallR   = 20.f / kPPM;
 constexpr int   kLevels  = 14;
-constexpr float kWallR   = 2.5f / kPPM;          // Wanddicke 5 px (Kapseln statt duenner Segmente -> kein Durchtunneln)
+constexpr float kWallR   = 4.5f / kPPM;          // Wanddicke 9 px (Kapseln); passt zur gezeichneten Linie kLineW und tunnelt weniger als 5 px
 constexpr float kFrame   = 200.f / kPPM;          // Mitte der Rahmenwand
 constexpr float kInner   = kFrame - kWallR;       // Innenkante des Rahmens
 constexpr float kFriction = 0.25f;               // Reibung Wand/Ball ("Klebrigkeit"); 1 = sehr klebrig, 0 = rutschig
 constexpr float kTiltGain = 12.f;                // rad/s pro g Neigung (0,5 g ~ 6 rad/s)
 constexpr float kTiltDead = 0.05f;               // Totzone in g
 constexpr float kTiltSign = 1.f;                 // -1, falls das Geraet die Neigung verkehrt herum meldet
-constexpr float kLineW   = 9.f;                  // GEZEICHNETE Liniendicke in px (nur Optik; Physik bleibt bei kWallR = 5 px)
+constexpr float kLineW   = 9.f;                  // gezeichnete Liniendicke in px (= 2 x kWallR)
 constexpr float kMetaBaseR  = 20.f;              // Basis-Kernradius der Metaballs in px (Skalierung 1)
 constexpr float kFluidDrawR = 14.f;              // GLOBAL: Kernradius des gezeichneten Schleims im Spiel in px (kleiner = kleinere Kreise)
 // Sichtbarer Radius eines Schleim-Partikels: der Iso-Rand (Schwelle 0,28) liegt bei ~0,69 x Kernradius. Fuer "Ziel beruehrt" zaehlt
@@ -32,7 +33,7 @@ constexpr float kMenuPrevX = 415.f, kMenuPrevY = 108.f, kMenuPrevS = 100.f;   //
 constexpr int kBuildStamp =
     ((__DATE__[4] == ' ' ? 0 : __DATE__[4] - '0') * 10 + (__DATE__[5] - '0')) * 10000 +
     ((__TIME__[0] - '0') * 10 + (__TIME__[1] - '0')) * 100 + ((__TIME__[3] - '0') * 10 + (__TIME__[4] - '0'));
-constexpr float kMaxW    = 8.f;                 // max. Winkelgeschwindigkeit des Kastens (rad/s)
+constexpr float kMaxW    = 4.f;                 // max. Winkelgeschwindigkeit des Kastens (rad/s); frueher 8 - die Eckengeschwindigkeit (r ~ 2,8 m) war so hoch, dass Tropfen durch die Waende gedrueckt wurden
 constexpr float kPartR   = 2.f / kPPM;
 constexpr int   kFluidWin = 1;                  // Partikel im Ziel zum Gewinnen
 const Color kBlack(0, 0, 0, 1), kBlue(0, 0, 1, 1), kRed(1, 0, 0, 1);
@@ -284,6 +285,7 @@ void BoxScene::startLevel(int level)
     if (B2_IS_NON_NULL(_world)) b2DestroyWorld(_world);
     _segs.clear();
     _parts.clear();
+    _prevL.clear();
     _ball = b2_nullBodyId;
     _level = level; _won = false; _w = 0.f; _winTimer = 0.f; _elapsed = 0.0;
     buildWorld(level);
@@ -547,9 +549,10 @@ void BoxScene::update(float dt)
     if (_mode == Mode::Ball) ballV0 = b2Body_GetLinearVelocity(_ball);
 
     if (_mode == Mode::Fluid) stepFluid();
-    for (int i = 0; i < 3; ++i)
+    for (int i = 0; i < kStepsPerFrame; ++i)
     {
         b2World_Step(_world, kStep, 4);
+        guardWalls();
         enforceBounds();
         if (goalTouched()) { _won = true; break; }   // nach jedem Substep pruefen: schnelle Koerper rutschen nicht am Ziel vorbei
     }
@@ -980,6 +983,45 @@ void BoxScene::drawMetaballs()
     MBPalette pal{{kWater[0], kWater[1], kWater[2], kWater[3]}, {kIso0, 0.45f, 0.80f, 1.35f},
                   kSlimeSoft, kSlimeCore, _shineOn, 4.f, 1.5f, {0.f, 3.f * s, 7.f * s, 12.f * s}};
     renderMetaballs(pts, pal);
+}
+
+// Tunnelschutz (manuelles Continuous Collision fuer die beweglichen Waende): Box2D prueft schnell bewegte kinematische Waende nicht
+// kontinuierlich. Hat ein Koerper zwischen zwei Substeps (in Container-Koordinaten) die Mittellinie einer Wand gekreuzt, wird er auf
+// seine vorherige Position zurueckgesetzt und bekommt die Geschwindigkeit der Wand dort - er "faellt" nicht mehr durch die Linie.
+namespace
+{
+bool segCross(b2Vec2 p, b2Vec2 q, b2Vec2 a, b2Vec2 b)
+{
+    auto o = [](b2Vec2 u, b2Vec2 v, b2Vec2 w) { return (v.x - u.x) * (w.y - u.y) - (v.y - u.y) * (w.x - u.x); };
+    const float d1 = o(a, b, p), d2 = o(a, b, q), d3 = o(p, q, a), d4 = o(p, q, b);
+    return ((d1 > 0.f) != (d2 > 0.f)) && ((d3 > 0.f) != (d4 > 0.f));
+}
+}  // namespace
+
+void BoxScene::guardWalls()
+{
+    std::vector<b2BodyId> ids = _parts;
+    if (B2_IS_NON_NULL(_ball)) ids.push_back(_ball);
+    if (_prevL.size() != ids.size())   // erster Aufruf nach dem Levelstart: Ausgangspositionen merken
+    {
+        _prevL.clear();
+        for (b2BodyId id : ids) _prevL.push_back(toV(b2Body_GetLocalPoint(_boxBody, b2Body_GetPosition(id))));
+        return;
+    }
+    for (size_t i = 0; i < ids.size(); ++i)
+    {
+        b2Vec2 now = toV(b2Body_GetLocalPoint(_boxBody, b2Body_GetPosition(ids[i])));
+        for (const Seg& s : _segs)
+            if (segCross(_prevL[i], now, s.a, s.b))
+            {
+                const b2Vec2 w = toV(b2Body_GetWorldPoint(_boxBody, _prevL[i]));
+                b2Body_SetTransform(ids[i], {w.x, w.y}, b2Body_GetRotation(ids[i]));
+                b2Body_SetLinearVelocity(ids[i], b2Body_GetWorldPointVelocity(_boxBody, {w.x, w.y}));
+                now = _prevL[i];
+                break;
+            }
+        _prevL[i] = now;
+    }
 }
 
 // Sicherheitsnetz: Ball/Partikel duerfen den Kasten nie verlassen. Liegt ein Koerper ausserhalb des Rahmens
