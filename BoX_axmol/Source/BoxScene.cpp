@@ -26,6 +26,11 @@ constexpr float kFluidTouchR = kFluidDrawR * 0.69f / kPPM;
 constexpr float kIso0 = 0.28f;                    // Iso-Schwelle der Schleim-Aussenkante (muss zur Palette passen)
 constexpr float kMenuLvX   = 205.f;              // Menue: x der Level-Zahl/Pfeile; rechts daneben die Level-Vorschau
 constexpr float kMenuPrevX = 415.f, kMenuPrevY = 108.f, kMenuPrevS = 100.f;   // Vorschau: Mitte + Kantenlaenge
+// Build-Stempel (Tag + Uhrzeit der Uebersetzung, z.B. 181234 = am 18. um 12:34): wird unten links im Menue angezeigt. Zeigen Desktop und
+// Android verschiedene Zahlen, laeuft auf einem der beiden ein alter Build (dann sauber neu bauen).
+constexpr int kBuildStamp =
+    ((__DATE__[4] == ' ' ? 0 : __DATE__[4] - '0') * 10 + (__DATE__[5] - '0')) * 10000 +
+    ((__TIME__[0] - '0') * 10 + (__TIME__[1] - '0')) * 100 + ((__TIME__[3] - '0') * 10 + (__TIME__[4] - '0'));
 constexpr float kMaxW    = 8.f;                 // max. Winkelgeschwindigkeit des Kastens (rad/s)
 constexpr float kPartR   = 2.f / kPPM;
 constexpr int   kFluidWin = 1;                  // Partikel im Ziel zum Gewinnen
@@ -848,6 +853,7 @@ void BoxScene::drawMenu()
     }
     drawLevelPreview(Vec2(kMenuPrevX, kMenuPrevY), kMenuPrevS, _menuLevel);
 
+    drawNumber(kBuildStamp, Vec2(8.f, 8.f), 3.f);   // Build-Stempel (siehe kBuildStamp)
     drawSpeaker(Vec2(610.f, 610.f), _sfxOn);
     if (_hasAccel) drawControlSwitch(Vec2(80.f, 591.f));   // Steuerung waehlbar nur, wenn ein Beschleunigungssensor vorhanden ist
 
@@ -1479,6 +1485,6 @@ void BoxScene::drawLevelPreview(Vec2 c, float size, int level)
     if (!logged)
     {
         logged = true;
-        AXLOGD("BoX level preview: level {} walls {} center ({}, {}) size {}", level, L.segs.size(), c.x, c.y, size);
+        AXLOGD("BoX build {} level preview: level {} walls {} center ({}, {}) size {}", kBuildStamp, level, L.segs.size(), c.x, c.y, size);
     }
 }

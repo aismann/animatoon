@@ -91,3 +91,6 @@ Menue: Neben der Level-Zahl zeigt eine Miniatur das gewaehlte Level (Waende, Zie
 Ein Tipp auf die Vorschau startet das Level. Im Spiel werden die Waende ueber Ball/Schleim gezeichnet.
 
 Level-Vorschau (Menue) liegt in einem eigenen DrawNode (`_drawTop`, z-Order 10) und nutzt nur Dreiecke und dicke Linien und schreibt einmal `BoX level preview: ...` ins Log (Android: `adb logcat | grep "BoX level preview"`).
+
+Build-Stempel: unten links im Menue steht eine kleine Zahl `TTHHMM` (Tag + Uhrzeit der Uebersetzung von `BoxScene.cpp`), auch im Log
+(`BoX build ...`). Zeigen Desktop und Android verschiedene Zahlen, laeuft eine Plattform mit einem alten Build.
