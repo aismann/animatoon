@@ -1430,25 +1430,51 @@ void BoxScene::drawControlSwitch(Vec2 c)
 
 // Miniatur des Levels fuer das Menue: Rahmen, Waende, Ziel (gruen) und Startpunkt (orange), leicht wippend wie ein
 // Kasten in der Hand. Zeigt die aktuellen Level-Daten, also auch im Editor geaenderte Levels.
+// Gezeichnet wird bewusst nur mit Dreiecken und dicken Linien (kein drawSolidPoly / drawDot / drawCircle): das sind auf allen
+// Plattformen (Desktop, Android, iOS) dieselben, einfachen DrawNode-Pfade.
 void BoxScene::drawLevelPreview(Vec2 c, float size, int level)
 {
-    const Color ink(0.08f, 0.14f, 0.35f, 1.f), gr(0.1f, 0.55f, 0.25f, 1.f);
-    const float s    = size / 400.f;                         // Level ist 400 x 400 px gross
-    const float ang  = 0.07f * sinf(_menuT * 1.3f);          // sanftes Wippen
+    const Color ink(0.08f, 0.14f, 0.35f, 1.f), gr(0.1f, 0.55f, 0.25f, 1.f), fill(0.93f, 0.96f, 1.f, 1.f);
+    const float s   = size / 400.f;                          // Level ist 400 x 400 px gross
+    const float ang = 0.07f * sinf(_menuT * 1.3f);           // sanftes Wippen
     const float ca = cosf(ang), sa = sinf(ang);
     auto P = [&](float lx, float ly) {                       // Level (y nach unten) -> Bildschirm, um die Mitte gedreht
         const float x = lx * s, y = -ly * s;
         return Vec2(c.x + x * ca - y * sa, c.y + x * sa + y * ca);
     };
+    auto disc = [&](Vec2 m, float r, const Color& col) {     // gefuellter Kreis als Dreiecksfaecher
+        const int n = 14;
+        for (int i = 0; i < n; ++i)
+        {
+            const float a0 = i * 6.2831853f / n, a1 = (i + 1) * 6.2831853f / n;
+            _draw->drawSolidTriangle(m, Vec2(m.x + cosf(a0) * r, m.y + sinf(a0) * r), Vec2(m.x + cosf(a1) * r, m.y + sinf(a1) * r),
+                                     col, col, 0.f);
+        }
+    };
+    auto ring = [&](Vec2 m, float r, const Color& col, float th) {
+        const int n = 14;
+        for (int i = 0; i < n; ++i)
+        {
+            const float a0 = i * 6.2831853f / n, a1 = (i + 1) * 6.2831853f / n;
+            _draw->drawLine(Vec2(m.x + cosf(a0) * r, m.y + sinf(a0) * r), Vec2(m.x + cosf(a1) * r, m.y + sinf(a1) * r), col, th);
+        }
+    };
     const LevelData& L = _levels[level];
 
-    // Flaeche mit Rahmen
-    Vec2 f[4] = {P(-200, -200), P(-200, 200), P(200, 200), P(200, -200)};
-    _draw->drawSolidPoly(f, 4, Color(0.93f, 0.96f, 1.f, 1.f), 0.f, Color(0, 0, 0, 0));
-    for (int i = 0; i < 4; ++i) _draw->drawLine(f[i], f[(i + 1) & 3], ink, 2.5f);
-    for (const auto& sg : L.segs) _draw->drawLine(P(sg[0], sg[1]), P(sg[2], sg[3]), ink, 2.f);
-    _draw->drawDot(P(L.gx, L.gy), 16.f * s + 1.5f, Color(0.2f, 0.75f, 0.35f, 0.4f));            // Ziel
-    _draw->drawCircle(P(L.gx, L.gy), 16.f * s + 1.5f, gr, 1.5f);
-    _draw->drawDot(P(180, -170), 3.f, Color(0.15f, 0.45f, 1.f, 1.f));                            // Start von Ball/Schleim
-    _draw->drawCircle(P(180, -170), 5.f, Color(0.85f, 0.45f, 0.2f, 1.f), 1.5f);
+    const Vec2 f[4] = {P(-200, -200), P(-200, 200), P(200, 200), P(200, -200)};
+    _draw->drawSolidTriangle(f[0], f[1], f[2], fill, fill, 0.f);                                // Flaeche
+    _draw->drawSolidTriangle(f[0], f[2], f[3], fill, fill, 0.f);
+    for (int i = 0; i < 4; ++i) _draw->drawLine(f[i], f[(i + 1) & 3], ink, 2.5f);                // Rahmen
+    for (const auto& sg : L.segs) _draw->drawLine(P(sg[0], sg[1]), P(sg[2], sg[3]), ink, 2.f);   // Waende
+    disc(P(L.gx, L.gy), 16.f * s + 1.5f, Color(0.2f, 0.75f, 0.35f, 1.f));                        // Ziel
+    ring(P(L.gx, L.gy), 16.f * s + 1.5f, gr, 1.5f);
+    disc(P(180, -170), 3.f, Color(0.15f, 0.45f, 1.f, 1.f));                                      // Start von Ball/Schleim
+    ring(P(180, -170), 5.f, Color(0.85f, 0.45f, 0.2f, 1.f), 1.5f);
+
+    static bool logged = false;   // einmalig ins Log (logcat: "BoX"), hilft bei der Fehlersuche auf dem Geraet
+    if (!logged)
+    {
+        logged = true;
+        AXLOGD("BoX level preview: level {} walls {} center ({}, {}) size {}", level, L.segs.size(), c.x, c.y, size);
+    }
 }

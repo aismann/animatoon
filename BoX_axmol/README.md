@@ -89,3 +89,5 @@ AppDelegate: `Source/AppDelegate.cpp/.h` (aus dem Axmol-Template abgeleitet) set
 (`director->setStatsDisplay(false)`) und starten `BoxScene::create()`. Wenn du deine eigene AppDelegate hast, uebernimm nur diese drei Dinge.
 Menue: Neben der Level-Zahl zeigt eine Miniatur das gewaehlte Level (Waende, Ziel, Startpunkt; auch im Editor geaenderte Levels).
 Ein Tipp auf die Vorschau startet das Level. Im Spiel werden die Waende ueber Ball/Schleim gezeichnet.
+
+Level-Vorschau (Menue) nutzt nur Dreiecke und dicke Linien und schreibt einmal `BoX level preview: ...` ins Log (Android: `adb logcat | grep "BoX level preview"`).
