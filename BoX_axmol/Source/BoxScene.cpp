@@ -1247,11 +1247,11 @@ void BoxScene::playTouch(int phase, intptr_t id, Vec2 p)
         if (id == _tRId) { _tRight = false; _tRId = -1; }
         return;
     }
-    auto near = [&](Vec2 c, float r) { return (p - c).length() < r; };
-    if (_control == Control::Buttons && near(Vec2(70.f, 64.f), 58.f)) { _tLeft = true;  _tLId = id; }
-    else if (_control == Control::Buttons && near(Vec2(570.f, 64.f), 58.f)) { _tRight = true; _tRId = id; }
-    else if (near(Vec2(320.f, 46.f), 36.f)) { _state = _fromEditor ? State::Editor : State::Menu; sfx(Sfx::Click); }
-    else if (near(Vec2(kWin - 30.f, 545.f), 28.f)) { _sfxOn = !_sfxOn; sfx(Sfx::Click); }
+    auto _near = [&](Vec2 c, float r) { return (p - c).length() < r; };
+    if (_control == Control::Buttons && _near(Vec2(70.f, 64.f), 58.f)) { _tLeft = true;  _tLId = id; }
+    else if (_control == Control::Buttons && _near(Vec2(570.f, 64.f), 58.f)) { _tRight = true; _tRId = id; }
+    else if (_near(Vec2(320.f, 46.f), 36.f)) { _state = _fromEditor ? State::Editor : State::Menu; sfx(Sfx::Click); }
+    else if (_near(Vec2(kWin - 30.f, 545.f), 28.f)) { _sfxOn = !_sfxOn; sfx(Sfx::Click); }
 }
 
 void BoxScene::drawTouchButtons()
