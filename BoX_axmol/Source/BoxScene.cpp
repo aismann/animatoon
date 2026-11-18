@@ -23,6 +23,7 @@ constexpr float kFluidDrawR = 14.f;              // GLOBAL: Kernradius des gezei
 // Sichtbarer Radius eines Schleim-Partikels: der Iso-Rand (Schwelle 0,28) liegt bei ~0,69 x Kernradius. Fuer "Ziel beruehrt" zaehlt
 // dieser gezeichnete Radius, nicht der winzige Physik-Radius kPartR (2 px) - sonst sieht man den Schleim das Ziel beruehren, ohne dass gewonnen wird.
 constexpr float kFluidTouchR = kFluidDrawR * 0.69f / kPPM;
+constexpr float kIso0 = 0.28f;                    // Iso-Schwelle der Schleim-Aussenkante (muss zur Palette passen)
 constexpr float kMaxW    = 8.f;                 // max. Winkelgeschwindigkeit des Kastens (rad/s)
 constexpr float kPartR   = 2.f / kPPM;
 constexpr int   kFluidWin = 1;                  // Partikel im Ziel zum Gewinnen
@@ -49,15 +50,13 @@ BoxScene* BoxScene::create()
 
 BoxScene::~BoxScene()
 {
-    setAccelerometer(false);
+    Device::setAccelerometerEnabled(false);   // Sensor (auch waehrend der Erkennung) sicher ausschalten
     if (B2_IS_NON_NULL(_world)) b2DestroyWorld(_world);
 }
 
 bool BoxScene::init()
 {
     if (!Scene::init()) return false;
-
-    Director::getInstance()->setStatsDisplay(false);   // FPS-/Statistik-Anzeige aus (auch in AppDelegate moeglich)
 
     auto* bg = LayerColor::create(Color32(200, 200, 200, 255));
     addChild(bg);
@@ -73,7 +72,7 @@ bool BoxScene::init()
         using K = KeyboardEvent::KeyCode;
         K k = e->getKeyCode();
         if (k == K::KEY_M) { _sfxOn = !_sfxOn; sfx(Sfx::Click); return; }   // Ton an/aus
-        if (k == K::KEY_C && _state == State::Menu) { _control = _control == Control::Buttons ? Control::Tilt : Control::Buttons; sfx(Sfx::Select); return; }   // Steuerung
+        if (k == K::KEY_C && _state == State::Menu && _hasAccel) { _control = _control == Control::Buttons ? Control::Tilt : Control::Buttons; sfx(Sfx::Select); return; }   // Steuerung
         if (k == K::KEY_G && _state != State::Editor) { _shineOn = !_shineOn; sfx(Sfx::Select); return; }   // Glanz an/aus
         if (_state == State::Menu)
         {
@@ -128,7 +127,7 @@ bool BoxScene::init()
             auto begin = [this]() { if (_editorOn) startEditor(); else startGame(); };
             const float cx = kWin / 2;
             if (p.x > 585 && p.x < 635 && p.y > 585 && p.y < 635) { _sfxOn = !_sfxOn; sfx(Sfx::Click); }   // Lautsprecher
-            else if (p.x > 20 && p.x < 140 && p.y > 560 && p.y < 622) { _control = p.x < 80 ? Control::Buttons : Control::Tilt; sfx(Sfx::Select); }   // Steuerung
+            else if (_hasAccel && p.x > 20 && p.x < 140 && p.y > 560 && p.y < 622) { _control = p.x < 80 ? Control::Buttons : Control::Tilt; sfx(Sfx::Select); }   // Steuerung
             else if (p.x > 30 && p.x < 130 && p.y > 85 && p.y < 160) { _shineOn = !_shineOn; sfx(Sfx::Select); }   // Glanz-Schalter
             else if (p.x > 520 && p.x < 600 && p.y > 85 && p.y < 135) { _editorOn = !_editorOn; sfx(Sfx::Select); }      // Editor-Schalter
             else if (p.y > 200 && p.y < 440 && p.x > 75 && p.x < 275) { _mode = Mode::Ball; begin(); }    // Karte: Ball -> Start
@@ -163,7 +162,11 @@ bool BoxScene::init()
 
     // Beschleunigungssensor (nur aktiv, wenn im Spiel die Neigungssteuerung gewaehlt ist)
     Device::setAccelerometerInterval(1.f / 60.f);
-    auto acc = AccelerationEventListener::create([this](AccelerationEvent* e) { _tilt = (float)e->getAcceleration().x * kTiltSign; });
+#if AX_TARGET_PLATFORM == AX_PLATFORM_ANDROID || AX_TARGET_PLATFORM == AX_PLATFORM_IOS
+    _probing = true;                                // Erkennung: Sensor kurz einschalten und auf Events warten
+    Device::setAccelerometerEnabled(true);
+#endif
+    auto acc = AccelerationEventListener::create([this](AccelerationEvent* e) { _hasAccel = true; _tilt = (float)e->getAcceleration().x * kTiltSign; });
     _eventDispatcher->addEventListenerWithSceneGraphPriority(acc, this);
 
     scheduleUpdate();
@@ -416,9 +419,39 @@ int BoxScene::countParticlesInGoal() const
 
 // Gewonnen, sobald der Ball dem Ziel nahe kommt: Abstand der Mitten < Zielradius + 2 x Ballradius (16 + 40 = 56 px). Beim Schleim reicht
 // kFluidWin Partikel im Ziel. Frueher musste die Ballmitte in einem 23-px-Quadrat liegen - das Beruehren reichte nicht.
+// Feldwert des Schleims (dieselbe Formel wie beim Zeichnen: Summe (1 - d^2/R^2)^2 mit R = kFluidDrawR) an der Zielmitte und an
+// 12 Punkten auf dem Zielrand; zurueckgegeben wird der groesste Wert. Ist er >= kIso0, liegt gezeichneter Schleim auf dem Ziel.
+float BoxScene::slimeFieldAtGoal() const
+{
+    const Vec2 g = px(toV(b2Body_GetWorldPoint(_boxBody, _goalLocal)));
+    const float gr = _goalR * kPPM, R2 = kFluidDrawR * kFluidDrawR;
+    std::vector<Vec2> pp;
+    pp.reserve(_parts.size());
+    for (b2BodyId id : _parts) pp.push_back(px(toV(b2Body_GetPosition(id))));
+    float best = 0.f;
+    for (int k = 0; k <= 12; ++k)
+    {
+        const float a = k == 0 ? 0.f : (k - 1) * 3.14159265f / 6.f;
+        const Vec2 s  = k == 0 ? g : Vec2(g.x + cosf(a) * gr, g.y + sinf(a) * gr);
+        float f       = 0.f;
+        for (const Vec2& p : pp)
+        {
+            const float dx = s.x - p.x, dy = s.y - p.y, q = 1.f - (dx * dx + dy * dy) / R2;
+            if (q > 0.f) f += q * q;
+        }
+        best = std::max(best, f);
+    }
+    return best;
+}
+
+// Gewonnen, sobald der Ball dem Ziel nahe kommt: Abstand der Mitten < Zielradius + 2 x Ballradius (16 + 40 = 56 px).
+// Schleim: bei kFluidWin <= 1 reicht es, dass der GEZEICHNETE Schleim das Ziel beruehrt (Metaball-Feld >= kIso0 auf der
+// Zielscheibe) - ein Cluster ragt weiter als einzelne Partikel, nur die Mittelpunkte zu pruefen verpasste sichtbare Beruehrungen.
+// Bei kFluidWin > 1 muessen so viele Partikel im Ziel sein.
 bool BoxScene::goalTouched() const
 {
-    if (_mode == Mode::Fluid) return countParticlesInGoal() >= kFluidWin;
+    if (_mode == Mode::Fluid)
+        return kFluidWin <= 1 ? slimeFieldAtGoal() >= kIso0 : countParticlesInGoal() >= kFluidWin;
     b2Vec2 g = toV(b2Body_GetWorldPoint(_boxBody, _goalLocal));
     b2Vec2 d = b2Sub(toV(b2Body_GetPosition(_ball)), g);
     const float rr = _goalR + kBallR * 2.f;
@@ -427,6 +460,12 @@ bool BoxScene::goalTouched() const
 
 void BoxScene::update(float dt)
 {
+    if (_probing && ((_probeT += dt) > 2.5f || _hasAccel))   // Erkennung beendet: Sensor nur noch bei Bedarf an
+    {
+        _probing = false;
+        Device::setAccelerometerEnabled(_accOn);
+    }
+    if (!_hasAccel) _control = Control::Buttons;      // ohne Sensor gibt es keine Neigungssteuerung
     setAccelerometer(_state == State::Play && _control == Control::Tilt);
     if (_state == State::Editor)
     {
@@ -802,7 +841,7 @@ void BoxScene::drawMenu()
     }
 
     drawSpeaker(Vec2(610.f, 610.f), _sfxOn);
-    drawControlSwitch(Vec2(80.f, 591.f));
+    if (_hasAccel) drawControlSwitch(Vec2(80.f, 591.f));   // Steuerung waehlbar nur, wenn ein Beschleunigungssensor vorhanden ist
 
     // Glanz-Schalter (G oder Klick): an = Schleim-Gruen, aus = grau. Steuert den Glanz auf dem Schleim.
     {
@@ -905,7 +944,7 @@ void BoxScene::drawMetaballs()
     for (b2BodyId id : _parts)
         pts.push_back({px(toV(b2Body_GetPosition(id))), s});
     // Ringabstaende (Rand -> Kern) mitskalieren, sonst verschwinden die inneren Ringe bei kleinen Kreisen
-    MBPalette pal{{kWater[0], kWater[1], kWater[2], kWater[3]}, {0.28f, 0.45f, 0.80f, 1.35f},
+    MBPalette pal{{kWater[0], kWater[1], kWater[2], kWater[3]}, {kIso0, 0.45f, 0.80f, 1.35f},
                   kSlimeSoft, kSlimeCore, _shineOn, 4.f, 1.5f, {0.f, 3.f * s, 7.f * s, 12.f * s}};
     renderMetaballs(pts, pal);
 }

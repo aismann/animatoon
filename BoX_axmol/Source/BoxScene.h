@@ -41,7 +41,8 @@ private:
     void roundedRect(ax::Vec2 c, ax::Vec2 half, float r, const ax::Color& fill, const ax::Color& border, float thick);
     void strokeLetter(char ch, ax::Vec2 o, float w, float h, const ax::Color& col, float thick);
     int countParticlesInGoal() const;
-    bool goalTouched() const;   // Ball/Schleim beruehrt das Ziel (Kreise ueberlappen)
+    bool goalTouched() const;   // Ball/Schleim beruehrt das Ziel
+    float slimeFieldAtGoal() const;   // groesster Metaball-Feldwert auf der Zielscheibe (gleiches Feld wie beim Zeichnen)
     void drawDigit(int digit, ax::Vec2 pos, float size);
     void drawTime(long ms, ax::Vec2 pos);
 
@@ -95,6 +96,9 @@ private:
     bool _left = false, _right = false, _won = false;
     enum class Control { Buttons, Tilt };     // Steuerung auf dem Handy: Bildschirm-Tasten oder Beschleunigungssensor
     Control _control = Control::Buttons;
+    bool _hasAccel   = false;                 // Beschleunigungssensor vorhanden (es kamen Sensor-Events)
+    bool _probing    = false;                 // Sensor-Erkennung laeuft (nur Android/iOS, kurz nach dem Start)
+    float _probeT    = 0.f;
     float _tilt      = 0.f;                   // aktuelle Neigung (Beschleunigung x, in g)
     bool _accOn      = false;                 // Sensor gerade aktiv (nur im Spiel mit Neigungssteuerung)
     bool _tLeft = false, _tRight = false;      // Touch-Tasten gedrueckt

@@ -69,7 +69,7 @@ Mobile / Touch:
   bei anderen Seitenverhaeltnissen entstehen Raender, die Koordinaten bleiben gueltig. Auf dem Geraet Querformat/Hochformat sperren,
   wie es zu deinem Projekt passt.
 
-Steuerung waehlbar (Menue links oben, oder Taste **C**): linkes Symbol = Bildschirm-Tasten, rechtes Symbol = **Neigung**
+Steuerung waehlbar (Menue links oben, oder Taste **C**; nur sichtbar, wenn ein Beschleunigungssensor erkannt wird - Android/iOS pruefen kurz nach dem Start, ob Sensor-Events kommen): linkes Symbol = Bildschirm-Tasten, rechtes Symbol = **Neigung**
 (Beschleunigungssensor, `Device::setAccelerometerEnabled`, nur waehrend des Spiels aktiv). Neigen nach rechts dreht den Kasten im
 Uhrzeigersinn, die Wasserwaage unten zeigt die Neigung. Tastatur funktioniert in beiden Modi weiter.
 Einstellungen am Anfang von `BoxScene.cpp`: `kTiltGain` (Empfindlichkeit), `kTiltDead` (Totzone), `kTiltSign` (auf -1 setzen, falls dein Geraet
@@ -82,5 +82,5 @@ Partikel im Ziel. Geprueft wird nach jedem Physik-Substep (3 pro Frame), damit s
 Schleim-Groesse: globale Konstante `kFluidDrawR` (Anfang von `BoxScene.cpp`, Standard 14 px; vorher 20 px) = Kernradius der gezeichneten
 Metaball-Kreise im Spiel. Kleiner = kleinere Kreise; Ringabstaende und Glanz skalieren mit. Die Physik (`kPartR`) bleibt unveraendert.
 
-Schleim-Ziel: "beruehrt" zaehlt mit dem sichtbaren Partikelradius (`kFluidTouchR` = 0,69 x `kFluidDrawR`), nicht mit dem Physik-Radius `kPartR`.
-Mit `kFluidWin = 1` gewinnt also schon ein einzelner Tropfen, sobald seine gezeichnete Kante das Ziel beruehrt.
+Schleim-Ziel: Mit `kFluidWin = 1` gewinnt der Schleim, sobald der GEZEICHNETE Schleim das Ziel beruehrt: `slimeFieldAtGoal()` wertet dasselbe
+Metaball-Feld wie die Zeichnung auf der Zielscheibe aus (>= `kIso0`). Bei `kFluidWin > 1` zaehlen Partikel im Ziel (`kFluidTouchR`).
