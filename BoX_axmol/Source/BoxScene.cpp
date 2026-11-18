@@ -18,8 +18,8 @@ constexpr float kTiltGain = 12.f;                // rad/s pro g Neigung (0,5 g ~
 constexpr float kTiltDead = 0.05f;               // Totzone in g
 constexpr float kTiltSign = 1.f;                 // -1, falls das Geraet die Neigung verkehrt herum meldet
 constexpr float kMaxW    = 8.f;                 // max. Winkelgeschwindigkeit des Kastens (rad/s)
-constexpr float kPartR   = 6.f / kPPM;
-constexpr int   kFluidWin = 4;                  // Partikel im Ziel zum Gewinnen
+constexpr float kPartR   = 2.f / kPPM;
+constexpr int   kFluidWin = 1;                  // Partikel im Ziel zum Gewinnen
 constexpr float kWinDist = 23.f / kPPM;
 const Color kBlack(0, 0, 0, 1), kBlue(0, 0, 1, 1), kRed(1, 0, 0, 1);
 
