@@ -54,6 +54,8 @@ bool BoxScene::init()
 {
     if (!Scene::init()) return false;
 
+    Director::getInstance()->setStatsDisplay(false);   // FPS-/Statistik-Anzeige aus (auch in AppDelegate moeglich)
+
     auto* bg = LayerColor::create(Color32(200, 200, 200, 255));
     addChild(bg);
     _draw = DrawNode::create();
