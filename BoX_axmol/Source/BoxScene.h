@@ -86,6 +86,8 @@ private:
 
     bool _shineOn = false;                    // Schleim-Glanz an/aus (Standard: aus; Schalter im Menue, Taste G)
     float _shAnim = 0.f;                      // Animation des Glanz-Schalters 0..1
+    bool _bannerShown = false;               // Banner (nur Android) gerade eingeblendet
+    int _adCounter    = 0;                   // gewonnene Level seit der letzten Vollbild-Anzeige
     bool _sfxOn = false;                      // Ton an/aus (Standard: aus; M oder Klick auf Lautsprecher)
     float _lastSfx[(int)Sfx::Count] = {};
 

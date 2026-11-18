@@ -94,3 +94,6 @@ Level-Vorschau (Menue) liegt in einem eigenen DrawNode (`_drawTop`, z-Order 10) 
 
 Build-Stempel: unten links im Menue steht eine kleine Zahl `TTHHMM` (Tag + Uhrzeit der Uebersetzung von `BoxScene.cpp`), auch im Log
 (`BoX build ...`). Zeigen Desktop und Android verschiedene Zahlen, laeuft eine Plattform mit einem alten Build.
+
+Werbung (nur Android, Google AdMob): siehe `android/README.md` (Patch fuer `proj.android`, `android/AdManager.java`, `Source/Ads.h`).
+Banner im Menue, Vollbild-Anzeige nach jedem 3. gewonnenen Level; Schalter in `Source/Ads.h`. Es sind Googles Test-IDs eingetragen.

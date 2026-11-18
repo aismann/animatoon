@@ -1,5 +1,6 @@
 #include "BoxScene.h"
 #include "MetaballMesh.h"
+#include "Ads.h"
 #include <sstream>
 using namespace ax;
 
@@ -476,6 +477,15 @@ void BoxScene::update(float dt)
     }
     if (!_hasAccel) _control = Control::Buttons;      // ohne Sensor gibt es keine Neigungssteuerung
     setAccelerometer(_state == State::Play && _control == Control::Tilt);
+    {   // Banner nur im Menue (im Spiel/Editor wuerde er Touch-Tasten und Leisten verdecken)
+        const bool wantBanner = _state == State::Menu;
+        if (wantBanner != _bannerShown)
+        {
+            _bannerShown = wantBanner;
+            if (wantBanner) Ads::showBanner();
+            else Ads::hideBanner();
+        }
+    }
     if (_state != State::Menu) _drawTop->clear();   // Vorschau nur im Menue
     if (_state == State::Editor)
     {
@@ -503,7 +513,16 @@ void BoxScene::update(float dt)
         }
         if (_winTimer > 1.5f && !_finished)
         {
-            if (_level < kLevels) { startLevel(_level + 1); sfx(Sfx::Level); }
+            if (_level < kLevels)
+            {
+                if (!_fromEditor && ++_adCounter >= Ads::kLevelsPerInterstitial)   // Vollbild-Anzeige zwischen zwei Levels
+                {
+                    _adCounter = 0;
+                    Ads::showInterstitial();
+                }
+                startLevel(_level + 1);
+                sfx(Sfx::Level);
+            }
             else { _finished = true; sfx(Sfx::Win); }
         }
         if (_finished && (_finishTimer += dt) > 3.f) _state = State::Menu;
