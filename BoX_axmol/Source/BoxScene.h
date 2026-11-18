@@ -29,6 +29,7 @@ private:
     void setAccelerometer(bool on);
     bool editorButton(ax::Vec2 world);
     void drawMenu();
+    void drawLevelPreview(ax::Vec2 c, float size, int level);   // Miniatur des Levels (Menue)
     void drawNumber(int n, ax::Vec2 pos, float size);
     void enforceBounds();
     void startGame();

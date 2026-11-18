@@ -24,6 +24,8 @@ constexpr float kFluidDrawR = 14.f;              // GLOBAL: Kernradius des gezei
 // dieser gezeichnete Radius, nicht der winzige Physik-Radius kPartR (2 px) - sonst sieht man den Schleim das Ziel beruehren, ohne dass gewonnen wird.
 constexpr float kFluidTouchR = kFluidDrawR * 0.69f / kPPM;
 constexpr float kIso0 = 0.28f;                    // Iso-Schwelle der Schleim-Aussenkante (muss zur Palette passen)
+constexpr float kMenuLvX   = 205.f;              // Menue: x der Level-Zahl/Pfeile; rechts daneben die Level-Vorschau
+constexpr float kMenuPrevX = 415.f, kMenuPrevY = 108.f, kMenuPrevS = 100.f;   // Vorschau: Mitte + Kantenlaenge
 constexpr float kMaxW    = 8.f;                 // max. Winkelgeschwindigkeit des Kastens (rad/s)
 constexpr float kPartR   = 2.f / kPPM;
 constexpr int   kFluidWin = 1;                  // Partikel im Ziel zum Gewinnen
@@ -125,18 +127,18 @@ bool BoxScene::init()
         if (_state == State::Menu)
         {
             auto begin = [this]() { if (_editorOn) startEditor(); else startGame(); };
-            const float cx = kWin / 2;
             if (p.x > 585 && p.x < 635 && p.y > 585 && p.y < 635) { _sfxOn = !_sfxOn; sfx(Sfx::Click); }   // Lautsprecher
             else if (_hasAccel && p.x > 20 && p.x < 140 && p.y > 560 && p.y < 622) { _control = p.x < 80 ? Control::Buttons : Control::Tilt; sfx(Sfx::Select); }   // Steuerung
             else if (p.x > 30 && p.x < 130 && p.y > 85 && p.y < 160) { _shineOn = !_shineOn; sfx(Sfx::Select); }   // Glanz-Schalter
             else if (p.x > 520 && p.x < 600 && p.y > 85 && p.y < 135) { _editorOn = !_editorOn; sfx(Sfx::Select); }      // Editor-Schalter
             else if (p.y > 200 && p.y < 440 && p.x > 75 && p.x < 275) { _mode = Mode::Ball; begin(); }    // Karte: Ball -> Start
             else if (p.y > 200 && p.y < 440 && p.x > 365 && p.x < 565) { _mode = Mode::Fluid; begin(); }  // Karte: Fluid -> Start
-            else if (std::abs(p.x - cx) < 40 && p.y > 125 && p.y < 165) { _menuLevel = _menuLevel % kLevels + 1; sfx(Sfx::Click); }            // Pfeil hoch
-            else if (std::abs(p.x - cx) < 40 && p.y > 78 && p.y < 100) { _menuLevel = (_menuLevel + kLevels - 2) % kLevels + 1; sfx(Sfx::Click); }   // Pfeil runter
-            else if (std::abs(p.y - 66.f) < 9.f)   // Punkte: Level direkt waehlen
+            else if (std::abs(p.x - kMenuLvX) < 40 && p.y > 125 && p.y < 165) { _menuLevel = _menuLevel % kLevels + 1; sfx(Sfx::Click); }            // Pfeil hoch
+            else if (std::abs(p.x - kMenuLvX) < 40 && p.y > 78 && p.y < 100) { _menuLevel = (_menuLevel + kLevels - 2) % kLevels + 1; sfx(Sfx::Click); }   // Pfeil runter
+            else if (std::abs(p.x - kMenuPrevX) < kMenuPrevS / 2 && std::abs(p.y - kMenuPrevY) < kMenuPrevS / 2) begin();   // Vorschau antippen = Level starten
+            else if (std::abs(p.y - 62.f) < 9.f)   // Punkte: Level direkt waehlen
             {
-                int i = (int)std::lround((p.x - (cx - 7.f * kLevels - 7.f)) / 14.f);
+                int i = (int)std::lround((p.x - (kMenuLvX - (kLevels - 1) * 5.5f)) / 11.f) + 1;
                 if (i >= 1 && i <= kLevels) { _menuLevel = i; sfx(Sfx::Click); }
             }
         }
@@ -571,26 +573,6 @@ void BoxScene::drawAll()
         for (int i = 0; i < 4; ++i) f[i] = px(toV(b2Body_GetWorldPoint(_boxBody, _segs[i].a)));   // Rahmenecken A, B, C, D
         _draw->drawSolidPoly(f, 4, Color(1.f, 1.f, 1.f, 0.28f), 0.f, Color(0, 0, 0, 0));
     }
-    const Color ink(0.08f, 0.14f, 0.35f, 1.f);
-    for (int pass = 0; pass < 2; ++pass)   // erst alle Schatten, dann alle Waende (keine Schatten ueber Waenden)
-        for (const Seg& s : _segs)
-        {
-            Vec2 a = px(toV(b2Body_GetWorldPoint(_boxBody, s.a)));
-            Vec2 b = px(toV(b2Body_GetWorldPoint(_boxBody, s.b)));
-            if (pass == 0)
-            {
-                _draw->drawLine(Vec2(a.x + 2.5f, a.y - 3.5f), Vec2(b.x + 2.5f, b.y - 3.5f), Color(0.f, 0.f, 0.25f, 0.20f), kLineW + 2.f);
-                continue;
-            }
-            _draw->drawLine(a, b, ink, kLineW);
-            _draw->drawLine(Vec2(a.x - 1.2f, a.y + 1.2f), Vec2(b.x - 1.2f, b.y + 1.2f), Color(0.55f, 0.70f, 1.f, 0.65f), 2.f);   // Glanzlinie
-            for (const Vec2& p : {a, b})   // runde Endkappen mit Glanz
-            {
-                _draw->drawDot(p, kLineW * 0.5f, ink);
-                _draw->drawDot(Vec2(p.x - 1.2f, p.y + 1.2f), kLineW * 0.25f, Color(0.60f, 0.75f, 1.f, 1.f));
-            }
-        }
-
     // Ziel: Zielscheibe mit Ringen, Mittelpunkt und pulsierendem Aussenring (gruen, wie im Editor)
     {
         Vec2 g   = px(toV(b2Body_GetWorldPoint(_boxBody, _goalLocal)));
@@ -639,6 +621,27 @@ void BoxScene::drawAll()
     {
         drawMetaballs();
     }
+
+    // Waende zuletzt: liegen ueber Ball bzw. Schleim
+    const Color ink(0.08f, 0.14f, 0.35f, 1.f);
+    for (int pass = 0; pass < 2; ++pass)   // erst alle Schatten, dann alle Waende (keine Schatten ueber Waenden)
+        for (const Seg& s : _segs)
+        {
+            Vec2 a = px(toV(b2Body_GetWorldPoint(_boxBody, s.a)));
+            Vec2 b = px(toV(b2Body_GetWorldPoint(_boxBody, s.b)));
+            if (pass == 0)
+            {
+                _draw->drawLine(Vec2(a.x + 2.5f, a.y - 3.5f), Vec2(b.x + 2.5f, b.y - 3.5f), Color(0.f, 0.f, 0.25f, 0.20f), kLineW + 2.f);
+                continue;
+            }
+            _draw->drawLine(a, b, ink, kLineW);
+            _draw->drawLine(Vec2(a.x - 1.2f, a.y + 1.2f), Vec2(b.x - 1.2f, b.y + 1.2f), Color(0.55f, 0.70f, 1.f, 0.65f), 2.f);   // Glanzlinie
+            for (const Vec2& p : {a, b})   // runde Endkappen mit Glanz
+            {
+                _draw->drawDot(p, kLineW * 0.5f, ink);
+                _draw->drawDot(Vec2(p.x - 1.2f, p.y + 1.2f), kLineW * 0.25f, Color(0.60f, 0.75f, 1.f, 1.f));
+            }
+        }
 
     // Zeit als 7-Segment (statt Label, da nur DrawNode erlaubt)
     drawTime((long)(_elapsed * 1000.0), Vec2(10, kWin - 40));
@@ -827,18 +830,19 @@ void BoxScene::drawMenu()
         renderMetaballs(pts, pal);
     }
 
-    // Level-Auswahl (Hoch/Runter): Karte mit Zahl, Pfeilen und Fortschrittspunkten
+    // Level-Auswahl (Hoch/Runter): Karte mit Zahl, Pfeilen, Fortschrittspunkten und Level-Vorschau
     roundedRect(Vec2(cx, 105.f), Vec2(190.f, 62.f), 18.f, Color(1.f, 1.f, 1.f, 1.f), Color(0.62f, 0.70f, 0.85f, 1.f), 2.f);
-    drawNumber(_menuLevel, Vec2(cx - (_menuLevel >= 10 ? 16.f : 8.f), 100.f), 8.f);
+    drawNumber(_menuLevel, Vec2(kMenuLvX - (_menuLevel >= 10 ? 16.f : 8.f), 100.f), 8.f);
     float bob = sinf(t * 4.f) * 2.f;
-    _draw->drawSolidTriangle(Vec2(cx - 9, 138 + bob), Vec2(cx + 9, 138 + bob), Vec2(cx, 152 + bob), ink, ink, 1.f);
-    _draw->drawSolidTriangle(Vec2(cx - 9, 92 - bob), Vec2(cx + 9, 92 - bob), Vec2(cx, 78 - bob), ink, ink, 1.f);
+    _draw->drawSolidTriangle(Vec2(kMenuLvX - 9, 138 + bob), Vec2(kMenuLvX + 9, 138 + bob), Vec2(kMenuLvX, 152 + bob), ink, ink, 1.f);
+    _draw->drawSolidTriangle(Vec2(kMenuLvX - 9, 92 - bob), Vec2(kMenuLvX + 9, 92 - bob), Vec2(kMenuLvX, 78 - bob), ink, ink, 1.f);
     for (int i = 1; i <= kLevels; ++i)
     {
-        Vec2 d(cx - 7 * kLevels + i * 14 - 7, 66);
+        Vec2 d(kMenuLvX - (kLevels - 1) * 5.5f + (i - 1) * 11.f, 62);
         if (i == _menuLevel) _draw->drawDot(d, 4.f, Color(0.15f, 0.45f, 1.f, 1.f));
-        else _draw->drawCircle(d, 3.f, ink, 1.f);
+        else _draw->drawCircle(d, 2.5f, ink, 1.f);
     }
+    drawLevelPreview(Vec2(kMenuPrevX, kMenuPrevY), kMenuPrevS, _menuLevel);
 
     drawSpeaker(Vec2(610.f, 610.f), _sfxOn);
     if (_hasAccel) drawControlSwitch(Vec2(80.f, 591.f));   // Steuerung waehlbar nur, wenn ein Beschleunigungssensor vorhanden ist
@@ -1422,4 +1426,29 @@ void BoxScene::drawControlSwitch(Vec2 c)
             _draw->drawDot(R(0, -8), 1.5f, ic);
         }
     }
+}
+
+// Miniatur des Levels fuer das Menue: Rahmen, Waende, Ziel (gruen) und Startpunkt (orange), leicht wippend wie ein
+// Kasten in der Hand. Zeigt die aktuellen Level-Daten, also auch im Editor geaenderte Levels.
+void BoxScene::drawLevelPreview(Vec2 c, float size, int level)
+{
+    const Color ink(0.08f, 0.14f, 0.35f, 1.f), gr(0.1f, 0.55f, 0.25f, 1.f);
+    const float s    = size / 400.f;                         // Level ist 400 x 400 px gross
+    const float ang  = 0.07f * sinf(_menuT * 1.3f);          // sanftes Wippen
+    const float ca = cosf(ang), sa = sinf(ang);
+    auto P = [&](float lx, float ly) {                       // Level (y nach unten) -> Bildschirm, um die Mitte gedreht
+        const float x = lx * s, y = -ly * s;
+        return Vec2(c.x + x * ca - y * sa, c.y + x * sa + y * ca);
+    };
+    const LevelData& L = _levels[level];
+
+    // Flaeche mit Rahmen
+    Vec2 f[4] = {P(-200, -200), P(-200, 200), P(200, 200), P(200, -200)};
+    _draw->drawSolidPoly(f, 4, Color(0.93f, 0.96f, 1.f, 1.f), 0.f, Color(0, 0, 0, 0));
+    for (int i = 0; i < 4; ++i) _draw->drawLine(f[i], f[(i + 1) & 3], ink, 2.5f);
+    for (const auto& sg : L.segs) _draw->drawLine(P(sg[0], sg[1]), P(sg[2], sg[3]), ink, 2.f);
+    _draw->drawDot(P(L.gx, L.gy), 16.f * s + 1.5f, Color(0.2f, 0.75f, 0.35f, 0.4f));            // Ziel
+    _draw->drawCircle(P(L.gx, L.gy), 16.f * s + 1.5f, gr, 1.5f);
+    _draw->drawDot(P(180, -170), 3.f, Color(0.15f, 0.45f, 1.f, 1.f));                            // Start von Ball/Schleim
+    _draw->drawCircle(P(180, -170), 5.f, Color(0.85f, 0.45f, 0.2f, 1.f), 1.5f);
 }
