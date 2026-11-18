@@ -111,6 +111,7 @@ bool BoxScene::init()
     ptr->onPointerDown = [this](PointerEvent* e) {
         Vec2 p = e->getWorldPoint();
         if (_state == State::Editor) { editorPointer(0, p, e->getButton()); return true; }
+        if (_state == State::Play) { playTouch(0, e->getPointerId(), p); return true; }
         if (_state == State::Menu)
         {
             auto begin = [this]() { if (_editorOn) startEditor(); else startGame(); };
@@ -131,7 +132,14 @@ bool BoxScene::init()
         return true;
     };
     ptr->onPointerMove = [this](PointerEvent* e) { if (_state == State::Editor) editorPointer(1, e->getWorldPoint(), 0); };
-    ptr->onPointerUp   = [this](PointerEvent* e) { if (_state == State::Editor) editorPointer(2, e->getWorldPoint(), 0); };
+    ptr->onPointerUp   = [this](PointerEvent* e) {
+        if (_state == State::Editor) editorPointer(2, e->getWorldPoint(), 0);
+        playTouch(2, e->getPointerId(), e->getWorldPoint());   // Touch-Tasten loslassen (auch nach Zustandswechsel)
+    };
+    ptr->onPointerCancel = [this](PointerEvent* e) {
+        if (_state == State::Editor) editorPointer(2, e->getWorldPoint(), 0);
+        playTouch(2, e->getPointerId(), e->getWorldPoint());
+    };
     // Fixed-Priority-Listener bekommen in Axmol keinen Kamera-Strahl -> getWorldPoint() waere immer (0,0).
     // Darum Scene-Graph-Listener mit eigenem Hit-Test, der jeden Punkt der Szene trifft.
     ptr->onPointerHitTest = [](PointerEvent* e, Vec3* hit) {
@@ -254,6 +262,8 @@ void BoxScene::startLevel(int level)
 void BoxScene::startGame()
 {
     _left = _right = false;
+    _tLeft = _tRight = false;
+    _tLId = _tRId = -1;
     _finished = false;
     _fromEditor = false;
     _finishTimer = 0.f;
@@ -427,8 +437,8 @@ void BoxScene::update(float dt)
 
     _menuT += dt;
     _elapsed += dt;
-    if (_left)  _w += 0.2f;
-    if (_right) _w -= 0.2f;   // y-Achse gespiegelt: rechts = im Uhrzeigersinn = negativ
+    if (_left || _tLeft)   _w += 0.2f;
+    if (_right || _tRight) _w -= 0.2f;   // y-Achse gespiegelt: rechts = im Uhrzeigersinn = negativ
     _w = std::max(-kMaxW, std::min(kMaxW, _w));
     b2Body_SetAngularVelocity(_boxBody, _w);
 
@@ -590,7 +600,8 @@ void BoxScene::drawAll()
     // Zeit als 7-Segment (statt Label, da nur DrawNode erlaubt)
     drawTime((long)(_elapsed * 1000.0), Vec2(10, kWin - 40));
 
-    drawSpeaker(Vec2(kWin - 24.f, 24.f), _sfxOn);   // Ton an/aus: M
+    drawSpeaker(Vec2(kWin - 30.f, 545.f), _sfxOn);   // Ton an/aus: M oder Tippen
+    drawTouchButtons();
 
     // Level-Anzeige: Zahl + Punkte fuer alle Levels (gefuellt = erreicht)
     drawNumber(_level, Vec2(kWin - 40, kWin - 40), 8.f);
@@ -1012,6 +1023,7 @@ void BoxScene::editorPointer(int phase, Vec2 world, int button)
 
     if (phase == 0)
     {
+        if (editorButton(world)) return;   // Touch-Leisten (Werkzeuge oben, Aktionen unten)
         if (button == InputButton::Right) { eraseAt(Vec2(world.x - 320.f, 320.f - world.y)); return; }
         if (_tool == 0) { _drag = true; _dragA = _dragB = p; }
         else if (_tool == 1) { L.gx = p.x; L.gy = p.y; saveLevels(); sfx(Sfx::Goal); }
@@ -1170,6 +1182,110 @@ void BoxScene::drawEditor()
     roundedRect(Vec2(kWin - 90.f, 590.f), Vec2(70.f, 28.f), 10.f, Color(1.f, 1.f, 1.f, 1.f), orange, 3.f);
     drawNumber(_level, Vec2(kWin - 90.f - (_level >= 10 ? 12.f : 4.f), 580.f), 6.f);
     _draw->drawLine(Vec2(kWin - 150.f, 580.f), Vec2(kWin - 130.f, 600.f), orange, 4.f);   // Stift
+
+    // Aktionsleiste unten (auch per Touch bedienbar): Zurueck | Rueckgaengig | Alles loeschen | Level - Zahl + | Testen
+    auto btn = [&](float x, bool hot) {
+        roundedRect(Vec2(x, 45.f), Vec2(30.f, 26.f), 9.f, hot ? Color(0.85f, 1.f, 0.88f, 1.f) : Color(1.f, 1.f, 1.f, 1.f),
+                    hot ? Color(0.1f, 0.55f, 0.25f, 1.f) : Color(0.62f, 0.70f, 0.85f, 1.f), 2.f);
+    };
+    btn(50.f, false);    // zurueck ins Menue
+    _draw->drawLine(Vec2(62, 45), Vec2(38, 45), ink, 4.f);
+    _draw->drawLine(Vec2(38, 45), Vec2(48, 55), ink, 4.f);
+    _draw->drawLine(Vec2(38, 45), Vec2(48, 35), ink, 4.f);
+    btn(115.f, false);   // letzte Wand zurueck
+    for (int i = 0; i < 9; ++i)
+    {
+        float a0 = (-30.f + i * 25.f) * 3.14159265f / 180.f, a1 = (-5.f + i * 25.f) * 3.14159265f / 180.f;
+        _draw->drawLine(Vec2(115.f + cosf(a0) * 12.f, 45.f + sinf(a0) * 12.f), Vec2(115.f + cosf(a1) * 12.f, 45.f + sinf(a1) * 12.f), ink, 3.f);
+    }
+    _draw->drawSolidTriangle(Vec2(103, 58), Vec2(103, 44), Vec2(115, 52), ink, ink, 1.f);
+    btn(180.f, false);   // alle Waende loeschen
+    _draw->drawLine(Vec2(170, 35), Vec2(190, 55), Color(0.9f, 0.2f, 0.2f, 1.f), 4.f);
+    _draw->drawLine(Vec2(170, 55), Vec2(190, 35), Color(0.9f, 0.2f, 0.2f, 1.f), 4.f);
+    btn(250.f, false);   // Level zurueck
+    _draw->drawSolidTriangle(Vec2(240, 52), Vec2(260, 52), Vec2(250, 38), ink, ink, 1.f);
+    drawNumber(_level, Vec2(295.f - (_level >= 10 ? 12.f : 4.f), 36.f), 6.f);
+    btn(340.f, false);   // Level vor
+    _draw->drawSolidTriangle(Vec2(330, 38), Vec2(350, 38), Vec2(340, 52), ink, ink, 1.f);
+    btn(590.f, true);    // Testen
+    _draw->drawSolidTriangle(Vec2(582, 33), Vec2(582, 57), Vec2(602, 45), Color(0.1f, 0.55f, 0.25f, 1.f), Color(0.1f, 0.55f, 0.25f, 1.f), 1.f);
+}
+
+// Klickbare Editor-Leisten (Touch): oben die Werkzeuge, unten die Aktionen. Gibt true zurueck, wenn der Tipp eine Leiste traf
+// (dann wird keine Wand gezogen).
+bool BoxScene::editorButton(Vec2 w)
+{
+    using K = KeyboardEvent::KeyCode;
+    if (w.y > 555.f)   // Werkzeug-Leiste
+    {
+        for (int i = 0; i < 3; ++i)
+            if (std::abs(w.x - (60.f + i * 70.f)) < 32.f) { _tool = i; sfx(Sfx::Click); }
+        return true;
+    }
+    if (w.y < 90.f)    // Aktionsleiste
+    {
+        struct B { float x; K key; };
+        const B bs[] = {{50.f, K::KEY_ESCAPE}, {115.f, K::KEY_Z}, {180.f, K::KEY_DELETE},
+                        {250.f, K::KEY_DOWN_ARROW}, {340.f, K::KEY_UP_ARROW}, {590.f, K::KEY_T}};
+        for (const B& b : bs)
+            if (std::abs(w.x - b.x) < 34.f && std::abs(w.y - 45.f) < 32.f)
+            {
+                editorKey((int)b.key);
+                if (b.key != K::KEY_Z && b.key != K::KEY_DELETE) sfx(Sfx::Click);
+                break;
+            }
+        return true;
+    }
+    return false;
+}
+
+// Touch-Tasten im Spiel: links/rechts drehen (gedrueckt halten, Multitouch moeglich), Mitte unten = zurueck,
+// Lautsprecher = Ton. Dieselbe Logik wie die Pfeiltasten.
+void BoxScene::playTouch(int phase, intptr_t id, Vec2 p)
+{
+    if (phase == 2)
+    {
+        if (id == _tLId) { _tLeft = false;  _tLId = -1; }
+        if (id == _tRId) { _tRight = false; _tRId = -1; }
+        return;
+    }
+    auto near = [&](Vec2 c, float r) { return (p - c).length() < r; };
+    if (near(Vec2(70.f, 64.f), 58.f)) { _tLeft = true;  _tLId = id; }
+    else if (near(Vec2(570.f, 64.f), 58.f)) { _tRight = true; _tRId = id; }
+    else if (near(Vec2(320.f, 46.f), 36.f)) { _state = _fromEditor ? State::Editor : State::Menu; sfx(Sfx::Click); }
+    else if (near(Vec2(kWin - 30.f, 545.f), 28.f)) { _sfxOn = !_sfxOn; if (!_sfxOn) stopSquish(); sfx(Sfx::Click); }
+}
+
+void BoxScene::drawTouchButtons()
+{
+    const Color ink(0.08f, 0.14f, 0.35f, 1.f);
+    auto arrow = [&](Vec2 c, bool ccw, bool pressed) {
+        _draw->drawDot(c, 50.f, Color(0.f, 0.f, 0.25f, 0.10f));   // Schatten
+        _draw->drawDot(c, 48.f, pressed ? Color(1.f, 1.f, 1.f, 0.95f) : Color(1.f, 1.f, 1.f, 0.55f));
+        _draw->drawCircle(c, 48.f, pressed ? Color(0.15f, 0.45f, 1.f, 1.f) : ink, pressed ? 4.f : 2.f);
+        // Kreisbogen-Pfeil (links = gegen den Uhrzeigersinn, rechts = im Uhrzeigersinn)
+        const float R = 22.f, d2r = 3.14159265f / 180.f;
+        const float s = ccw ? 1.f : -1.f;
+        float a0 = (ccw ? -60.f : 240.f), step = 20.f * s;
+        for (int i = 0; i < 12; ++i)
+        {
+            float x0 = (a0 + i * step) * d2r, x1 = (a0 + (i + 1) * step) * d2r;
+            _draw->drawLine(Vec2(c.x + cosf(x0) * R, c.y + sinf(x0) * R), Vec2(c.x + cosf(x1) * R, c.y + sinf(x1) * R), ink, 4.f);
+        }
+        float ae = (a0 + 12 * step) * d2r;                       // Pfeilspitze am Bogenende, Richtung = Tangente
+        Vec2 tip(c.x + cosf(ae) * R, c.y + sinf(ae) * R), dir(-sinf(ae) * s, cosf(ae) * s), nrm(-dir.y, dir.x);
+        _draw->drawSolidTriangle(tip + dir * 10.f, tip - dir * 4.f + nrm * 9.f, tip - dir * 4.f - nrm * 9.f, ink, ink, 1.f);
+    };
+    arrow(Vec2(70.f, 64.f), true, _left || _tLeft);
+    arrow(Vec2(570.f, 64.f), false, _right || _tRight);
+
+    // Zurueck (Mitte unten): Pfeil nach links
+    Vec2 b(320.f, 46.f);
+    _draw->drawDot(b, 30.f, Color(1.f, 1.f, 1.f, 0.55f));
+    _draw->drawCircle(b, 30.f, ink, 2.f);
+    _draw->drawLine(Vec2(b.x + 12.f, b.y), Vec2(b.x - 12.f, b.y), ink, 4.f);
+    _draw->drawLine(Vec2(b.x - 12.f, b.y), Vec2(b.x - 2.f, b.y + 10.f), ink, 4.f);
+    _draw->drawLine(Vec2(b.x - 12.f, b.y), Vec2(b.x - 2.f, b.y - 10.f), ink, 4.f);
 }
 
 // ------------------------------------------------------------------------------------------------

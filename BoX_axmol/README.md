@@ -58,3 +58,13 @@ Glanz-Schalter: Variable `_shineOn` (Standard aus). Im Menue links unten (Funkel
 den Glanz auf dem Schleim an/aus; aus = das zweite Glanz-Feld wird gar nicht erst berechnet (spart Rechenzeit).
 
 Der Ton ist standardmaessig **aus** (`_sfxOn = false` in `BoxScene.h`); mit **M** oder per Klick auf den Lautsprecher schaltest du ihn ein.
+
+Mobile / Touch:
+- Spiel: zwei grosse Tasten unten links/rechts (gegen/im Uhrzeigersinn drehen, gedrueckt halten, Multitouch moeglich, wie die Pfeiltasten),
+  Mitte unten = Zurueck (Menue bzw. Editor), Lautsprecher rechts = Ton an/aus.
+- Menue: alles per Tippen (Karte = Start, Pfeile/Punkte = Level, Schalter fuer Editor und Glanz, Lautsprecher).
+- Editor: Werkzeug-Leiste oben (Wand/Ziel/Radierer) und Aktionsleiste unten (Zurueck, Rueckgaengig, Alles loeschen, Level -/+,
+  Testen) sind antippbar; Waende mit dem Finger ziehen.
+- Die Tippbereiche gehen von der Design-Aufloesung 640x640 aus (`setDesignResolutionSize(640, 640, ResolutionPolicy::SHOW_ALL)`);
+  bei anderen Seitenverhaeltnissen entstehen Raender, die Koordinaten bleiben gueltig. Auf dem Geraet Querformat/Hochformat sperren,
+  wie es zu deinem Projekt passt.

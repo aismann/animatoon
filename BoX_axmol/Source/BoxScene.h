@@ -22,6 +22,10 @@ private:
     enum class Sfx { Click, Select, Start, HitSoft, HitHard, Win, Level, Pop, Erase, Goal, Yeah, Count };
     void sfx(Sfx id, float volume = 1.f);               // spielt Content/sfx/<name>.wav (mit Mindestabstand)
     void drawSpeaker(ax::Vec2 c, bool on);
+    // Touch/Mobile: Bildschirm-Tasten (Drehen links/rechts halten, Zurueck, Ton) + klickbare Editor-Leisten
+    void playTouch(int phase, intptr_t id, ax::Vec2 p);   // 0 = down, 2 = up/cancel
+    void drawTouchButtons();
+    bool editorButton(ax::Vec2 world);
     void updateSquish(float speed);   // Schleim in Bewegung: loopendes "Squosh" (Lautstaerke/Tonhoehe nach Tempo)
     void stopSquish();
     void drawMenu();
@@ -90,6 +94,8 @@ private:
     float _finishTimer = 0.f;
 
     bool _left = false, _right = false, _won = false;
+    bool _tLeft = false, _tRight = false;      // Touch-Tasten gedrueckt
+    intptr_t _tLId = -1, _tRId = -1;           // zugehoerige Pointer-IDs (Multitouch)
     float _w         = 0.f;   // Winkelgeschwindigkeit des Containers
     double _elapsed  = 0.0;   // Sekunden
 };
