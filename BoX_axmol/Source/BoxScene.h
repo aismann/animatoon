@@ -41,6 +41,7 @@ private:
     void roundedRect(ax::Vec2 c, ax::Vec2 half, float r, const ax::Color& fill, const ax::Color& border, float thick);
     void strokeLetter(char ch, ax::Vec2 o, float w, float h, const ax::Color& col, float thick);
     int countParticlesInGoal() const;
+    bool goalTouched() const;   // Ball/Schleim beruehrt das Ziel (Kreise ueberlappen)
     void drawDigit(int digit, ax::Vec2 pos, float size);
     void drawTime(long ms, ax::Vec2 pos);
 

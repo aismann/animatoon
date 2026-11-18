@@ -21,7 +21,6 @@ constexpr float kLineW   = 9.f;                  // GEZEICHNETE Liniendicke in p
 constexpr float kMaxW    = 8.f;                 // max. Winkelgeschwindigkeit des Kastens (rad/s)
 constexpr float kPartR   = 2.f / kPPM;
 constexpr int   kFluidWin = 1;                  // Partikel im Ziel zum Gewinnen
-constexpr float kWinDist = 23.f / kPPM;
 const Color kBlack(0, 0, 0, 1), kBlue(0, 0, 1, 1), kRed(1, 0, 0, 1);
 
 // PureBasic hat y nach unten, Axmol/Box2D nach oben -> y spiegeln. Eingabe in Pixeln, Ausgabe in Metern.
@@ -408,6 +407,17 @@ int BoxScene::countParticlesInGoal() const
     return cnt;
 }
 
+// Gewonnen, sobald der Ball das Ziel beruehrt: Kreise (Ball r 20 px, Ziel r 16 px) ueberlappen. Beim Schleim reicht
+// kFluidWin Partikel im Ziel. Frueher musste die Ballmitte in einem 23-px-Quadrat liegen - das Beruehren reichte nicht.
+bool BoxScene::goalTouched() const
+{
+    if (_mode == Mode::Fluid) return countParticlesInGoal() >= kFluidWin;
+    b2Vec2 g = toV(b2Body_GetWorldPoint(_boxBody, _goalLocal));
+    b2Vec2 d = b2Sub(toV(b2Body_GetPosition(_ball)), g);
+    const float rr = _goalR + kBallR;
+    return d.x * d.x + d.y * d.y < rr * rr;
+}
+
 void BoxScene::update(float dt)
 {
     setAccelerometer(_state == State::Play && _control == Control::Tilt);
@@ -466,6 +476,7 @@ void BoxScene::update(float dt)
     {
         b2World_Step(_world, kStep, 4);
         enforceBounds();
+        if (goalTouched()) { _won = true; break; }   // nach jedem Substep pruefen: schnelle Koerper rutschen nicht am Ziel vorbei
     }
 
     if (_mode == Mode::Ball)
@@ -476,20 +487,8 @@ void BoxScene::update(float dt)
         else if (dv > 1.2f) sfx(Sfx::HitSoft, std::min(1.f, dv / 4.f));
     }
 
-    b2Vec2 g = toV(b2Body_GetWorldPoint(_boxBody, _goalLocal));
-    if (_mode == Mode::Ball)
+    if (_won)
     {
-        b2Vec2 b = toV(b2Body_GetPosition(_ball));
-        if (std::abs(b.x - g.x) < kWinDist && std::abs(b.y - g.y) < kWinDist)
-        {
-            _won = true;
-            sfx(Sfx::Win);
-            sfx(Sfx::Yeah);   // "yeaahhh" - Ziel erreicht
-        }
-    }
-    else if (countParticlesInGoal() >= kFluidWin)
-    {
-        _won = true;
         sfx(Sfx::Win);
         sfx(Sfx::Yeah);   // "yeaahhh" - Ziel erreicht
     }
