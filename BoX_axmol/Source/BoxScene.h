@@ -64,6 +64,7 @@ private:
     struct Seg { b2Vec2 a, b; };   // lokale Container-Koordinaten (Meter)
 
     ax::DrawNode* _draw = nullptr;
+    ax::DrawNode* _drawTop = nullptr;   // eigener DrawNode ueber allem (Level-Vorschau im Menue)
     b2WorldId _world    = b2_nullWorldId;
     b2BodyId _boxBody   = b2_nullBodyId;  // rotierender Container (kinematisch)
     b2BodyId _ball      = b2_nullBodyId;

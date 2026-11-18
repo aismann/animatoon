@@ -90,4 +90,4 @@ AppDelegate: `Source/AppDelegate.cpp/.h` (aus dem Axmol-Template abgeleitet) set
 Menue: Neben der Level-Zahl zeigt eine Miniatur das gewaehlte Level (Waende, Ziel, Startpunkt; auch im Editor geaenderte Levels).
 Ein Tipp auf die Vorschau startet das Level. Im Spiel werden die Waende ueber Ball/Schleim gezeichnet.
 
-Level-Vorschau (Menue) nutzt nur Dreiecke und dicke Linien und schreibt einmal `BoX level preview: ...` ins Log (Android: `adb logcat | grep "BoX level preview"`).
+Level-Vorschau (Menue) liegt in einem eigenen DrawNode (`_drawTop`, z-Order 10) und nutzt nur Dreiecke und dicke Linien und schreibt einmal `BoX level preview: ...` ins Log (Android: `adb logcat | grep "BoX level preview"`).
