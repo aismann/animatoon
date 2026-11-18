@@ -25,6 +25,8 @@ private:
     // Touch/Mobile: Bildschirm-Tasten (Drehen links/rechts halten, Zurueck, Ton) + klickbare Editor-Leisten
     void playTouch(int phase, intptr_t id, ax::Vec2 p);   // 0 = down, 2 = up/cancel
     void drawTouchButtons();
+    void drawControlSwitch(ax::Vec2 c);   // Menue: Umschalter Tasten <-> Neigung (Beschleunigungssensor)
+    void setAccelerometer(bool on);
     bool editorButton(ax::Vec2 world);
     void updateSquish(float speed);   // Schleim in Bewegung: loopendes "Squosh" (Lautstaerke/Tonhoehe nach Tempo)
     void stopSquish();
@@ -94,6 +96,10 @@ private:
     float _finishTimer = 0.f;
 
     bool _left = false, _right = false, _won = false;
+    enum class Control { Buttons, Tilt };     // Steuerung auf dem Handy: Bildschirm-Tasten oder Beschleunigungssensor
+    Control _control = Control::Buttons;
+    float _tilt      = 0.f;                   // aktuelle Neigung (Beschleunigung x, in g)
+    bool _accOn      = false;                 // Sensor gerade aktiv (nur im Spiel mit Neigungssteuerung)
     bool _tLeft = false, _tRight = false;      // Touch-Tasten gedrueckt
     intptr_t _tLId = -1, _tRId = -1;           // zugehoerige Pointer-IDs (Multitouch)
     float _w         = 0.f;   // Winkelgeschwindigkeit des Containers

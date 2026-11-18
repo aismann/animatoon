@@ -68,3 +68,10 @@ Mobile / Touch:
 - Die Tippbereiche gehen von der Design-Aufloesung 640x640 aus (`setDesignResolutionSize(640, 640, ResolutionPolicy::SHOW_ALL)`);
   bei anderen Seitenverhaeltnissen entstehen Raender, die Koordinaten bleiben gueltig. Auf dem Geraet Querformat/Hochformat sperren,
   wie es zu deinem Projekt passt.
+
+Steuerung waehlbar (Menue links oben, oder Taste **C**): linkes Symbol = Bildschirm-Tasten, rechtes Symbol = **Neigung**
+(Beschleunigungssensor, `Device::setAccelerometerEnabled`, nur waehrend des Spiels aktiv). Neigen nach rechts dreht den Kasten im
+Uhrzeigersinn, die Wasserwaage unten zeigt die Neigung. Tastatur funktioniert in beiden Modi weiter.
+Einstellungen am Anfang von `BoxScene.cpp`: `kTiltGain` (Empfindlichkeit), `kTiltDead` (Totzone), `kTiltSign` (auf -1 setzen, falls dein Geraet
+die Richtung verkehrt herum meldet). Das Mapping nimmt Hochformat an (x-Achse = rechts); im Querformat musst du ggf. die Achse tauschen.
+Am Desktop gibt es keinen Sensor - dort bleibt die Neigung 0.

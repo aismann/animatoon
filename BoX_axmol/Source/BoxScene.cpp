@@ -14,6 +14,9 @@ constexpr float kWallR   = 2.5f / kPPM;          // Wanddicke 5 px (Kapseln stat
 constexpr float kFrame   = 200.f / kPPM;          // Mitte der Rahmenwand
 constexpr float kInner   = kFrame - kWallR;       // Innenkante des Rahmens
 constexpr float kFriction = 0.25f;               // Reibung Wand/Ball ("Klebrigkeit"); 1 = sehr klebrig, 0 = rutschig
+constexpr float kTiltGain = 12.f;                // rad/s pro g Neigung (0,5 g ~ 6 rad/s)
+constexpr float kTiltDead = 0.05f;               // Totzone in g
+constexpr float kTiltSign = 1.f;                 // -1, falls das Geraet die Neigung verkehrt herum meldet
 constexpr float kMaxW    = 8.f;                 // max. Winkelgeschwindigkeit des Kastens (rad/s)
 constexpr float kPartR   = 6.f / kPPM;
 constexpr int   kFluidWin = 4;                  // Partikel im Ziel zum Gewinnen
@@ -42,6 +45,7 @@ BoxScene* BoxScene::create()
 BoxScene::~BoxScene()
 {
     stopSquish();
+    setAccelerometer(false);
     if (B2_IS_NON_NULL(_world)) b2DestroyWorld(_world);
 }
 
@@ -63,6 +67,7 @@ bool BoxScene::init()
         using K = KeyboardEvent::KeyCode;
         K k = e->getKeyCode();
         if (k == K::KEY_M) { _sfxOn = !_sfxOn; if (!_sfxOn) stopSquish(); sfx(Sfx::Click); return; }   // Ton an/aus
+        if (k == K::KEY_C && _state == State::Menu) { _control = _control == Control::Buttons ? Control::Tilt : Control::Buttons; sfx(Sfx::Select); return; }   // Steuerung
         if (k == K::KEY_G && _state != State::Editor) { _shineOn = !_shineOn; sfx(Sfx::Select); return; }   // Glanz an/aus
         if (_state == State::Menu)
         {
@@ -117,6 +122,7 @@ bool BoxScene::init()
             auto begin = [this]() { if (_editorOn) startEditor(); else startGame(); };
             const float cx = kWin / 2;
             if (p.x > 585 && p.x < 635 && p.y > 585 && p.y < 635) { _sfxOn = !_sfxOn; if (!_sfxOn) stopSquish(); sfx(Sfx::Click); }   // Lautsprecher
+            else if (p.x > 20 && p.x < 140 && p.y > 560 && p.y < 622) { _control = p.x < 80 ? Control::Buttons : Control::Tilt; sfx(Sfx::Select); }   // Steuerung
             else if (p.x > 30 && p.x < 130 && p.y > 85 && p.y < 160) { _shineOn = !_shineOn; sfx(Sfx::Select); }   // Glanz-Schalter
             else if (p.x > 520 && p.x < 600 && p.y > 85 && p.y < 135) { _editorOn = !_editorOn; sfx(Sfx::Select); }      // Editor-Schalter
             else if (p.y > 200 && p.y < 440 && p.x > 75 && p.x < 275) { _mode = Mode::Ball; begin(); }    // Karte: Ball -> Start
@@ -148,6 +154,11 @@ bool BoxScene::init()
         return true;
     };
     _eventDispatcher->addEventListenerWithSceneGraphPriority(ptr, this);
+
+    // Beschleunigungssensor (nur aktiv, wenn im Spiel die Neigungssteuerung gewaehlt ist)
+    Device::setAccelerometerInterval(1.f / 60.f);
+    auto acc = AccelerationEventListener::create([this](AccelerationEvent* e) { _tilt = (float)e->getAcceleration().x * kTiltSign; });
+    _eventDispatcher->addEventListenerWithSceneGraphPriority(acc, this);
 
     scheduleUpdate();
     return true;
@@ -400,6 +411,7 @@ int BoxScene::countParticlesInGoal() const
 void BoxScene::update(float dt)
 {
     if (_state != State::Play) stopSquish();
+    setAccelerometer(_state == State::Play && _control == Control::Tilt);
     if (_state == State::Editor)
     {
         _menuT += dt;
@@ -437,7 +449,12 @@ void BoxScene::update(float dt)
 
     _menuT += dt;
     _elapsed += dt;
-    if (_left || _tLeft)   _w += 0.2f;
+    if (_control == Control::Tilt)   // Neigung -> Drehgeschwindigkeit (weich nachgefuehrt); rechts neigen = im Uhrzeigersinn
+    {
+        float t = std::abs(_tilt) < kTiltDead ? 0.f : _tilt;
+        _w += (-t * kTiltGain - _w) * 0.15f;
+    }
+    if (_left || _tLeft)   _w += 0.2f;   // Tastatur geht immer, Touch-Tasten nur im Tasten-Modus (siehe playTouch)
     if (_right || _tRight) _w -= 0.2f;   // y-Achse gespiegelt: rechts = im Uhrzeigersinn = negativ
     _w = std::max(-kMaxW, std::min(kMaxW, _w));
     b2Body_SetAngularVelocity(_boxBody, _w);
@@ -798,6 +815,7 @@ void BoxScene::drawMenu()
     }
 
     drawSpeaker(Vec2(610.f, 610.f), _sfxOn);
+    drawControlSwitch(Vec2(80.f, 591.f));
 
     // Glanz-Schalter (G oder Klick): an = Schleim-Gruen, aus = grau. Steuert den Glanz auf dem Schleim.
     {
@@ -1250,8 +1268,8 @@ void BoxScene::playTouch(int phase, intptr_t id, Vec2 p)
         return;
     }
     auto near = [&](Vec2 c, float r) { return (p - c).length() < r; };
-    if (near(Vec2(70.f, 64.f), 58.f)) { _tLeft = true;  _tLId = id; }
-    else if (near(Vec2(570.f, 64.f), 58.f)) { _tRight = true; _tRId = id; }
+    if (_control == Control::Buttons && near(Vec2(70.f, 64.f), 58.f)) { _tLeft = true;  _tLId = id; }
+    else if (_control == Control::Buttons && near(Vec2(570.f, 64.f), 58.f)) { _tRight = true; _tRId = id; }
     else if (near(Vec2(320.f, 46.f), 36.f)) { _state = _fromEditor ? State::Editor : State::Menu; sfx(Sfx::Click); }
     else if (near(Vec2(kWin - 30.f, 545.f), 28.f)) { _sfxOn = !_sfxOn; if (!_sfxOn) stopSquish(); sfx(Sfx::Click); }
 }
@@ -1276,8 +1294,21 @@ void BoxScene::drawTouchButtons()
         Vec2 tip(c.x + cosf(ae) * R, c.y + sinf(ae) * R), dir(-sinf(ae) * s, cosf(ae) * s), nrm(-dir.y, dir.x);
         _draw->drawSolidTriangle(tip + dir * 10.f, tip - dir * 4.f + nrm * 9.f, tip - dir * 4.f - nrm * 9.f, ink, ink, 1.f);
     };
-    arrow(Vec2(70.f, 64.f), true, _left || _tLeft);
-    arrow(Vec2(570.f, 64.f), false, _right || _tRight);
+    if (_control == Control::Buttons)
+    {
+        arrow(Vec2(70.f, 64.f), true, _left || _tLeft);
+        arrow(Vec2(570.f, 64.f), false, _right || _tRight);
+    }
+    else
+    {   // Neigungs-Anzeige: Wasserwaage unten, die Kugel zeigt die Neigung
+        const float L = 170.f, y = 92.f;
+        _draw->drawLine(Vec2(320.f - L, y), Vec2(320.f + L, y), Color(1.f, 1.f, 1.f, 0.6f), 10.f);
+        _draw->drawLine(Vec2(320.f - L, y), Vec2(320.f + L, y), ink, 2.f);
+        _draw->drawLine(Vec2(320.f, y - 9.f), Vec2(320.f, y + 9.f), ink, 2.f);
+        float t = std::max(-1.f, std::min(1.f, _tilt / 0.6f));
+        _draw->drawDot(Vec2(320.f + t * L, y), 9.f, Color(0.15f, 0.45f, 1.f, 1.f));
+        _draw->drawCircle(Vec2(320.f + t * L, y), 9.f, ink, 2.f);
+    }
 
     // Zurueck (Mitte unten): Pfeil nach links
     Vec2 b(320.f, 46.f);
@@ -1357,4 +1388,41 @@ void BoxScene::stopSquish()
         _squishId = AudioEngine::INVALID_AUDIO_ID;
     }
     _squishSm = 0.f;
+}
+
+void BoxScene::setAccelerometer(bool on)
+{
+    if (on == _accOn) return;
+    _accOn = on;
+    Device::setAccelerometerEnabled(on);
+    if (!on) _tilt = 0.f;
+}
+
+// Umschalter fuer die Handy-Steuerung (C oder Tippen): links Bildschirm-Tasten, rechts Neigung (Beschleunigungssensor)
+void BoxScene::drawControlSwitch(Vec2 c)
+{
+    const Color accent(0.15f, 0.45f, 1.f, 1.f), edge(0.62f, 0.70f, 0.85f, 1.f);
+    roundedRect(c, Vec2(60.f, 30.f), 14.f, Color(1.f, 1.f, 1.f, 0.85f), edge, 2.f);
+    for (int i = 0; i < 2; ++i)
+    {
+        const bool sel = (i == 0) == (_control == Control::Buttons);
+        Vec2 m(c.x + (i == 0 ? -30.f : 30.f), c.y);
+        if (sel) roundedRect(m, Vec2(26.f, 25.f), 11.f, Color(0.88f, 0.94f, 1.f, 1.f), accent, 3.f);
+        const Color ic = sel ? accent : edge;
+        if (i == 0)   // Tasten-Symbol: zwei Knoepfe mit Pfeilen
+        {
+            _draw->drawCircle(Vec2(m.x - 10.f, m.y), 8.f, ic, 2.5f);
+            _draw->drawCircle(Vec2(m.x + 10.f, m.y), 8.f, ic, 2.5f);
+            _draw->drawLine(Vec2(m.x - 13.f, m.y), Vec2(m.x - 7.f, m.y), ic, 2.f);
+            _draw->drawLine(Vec2(m.x + 7.f, m.y), Vec2(m.x + 13.f, m.y), ic, 2.f);
+        }
+        else          // Neigungs-Symbol: gekipptes Handy + Bogen
+        {
+            float a = 0.35f + (sel ? 0.25f * sinf(_menuT * 4.f) : 0.f);
+            auto R = [&](float x, float y) { return Vec2(m.x + x * cosf(a) - y * sinf(a), m.y + x * sinf(a) + y * cosf(a)); };
+            Vec2 q[4] = {R(-6, -11), R(6, -11), R(6, 11), R(-6, 11)};
+            for (int k = 0; k < 4; ++k) _draw->drawLine(q[k], q[(k + 1) & 3], ic, 2.5f);
+            _draw->drawDot(R(0, -8), 1.5f, ic);
+        }
+    }
 }
