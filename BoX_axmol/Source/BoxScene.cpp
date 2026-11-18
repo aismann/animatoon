@@ -17,6 +17,7 @@ constexpr float kFriction = 0.25f;               // Reibung Wand/Ball ("Klebrigk
 constexpr float kTiltGain = 12.f;                // rad/s pro g Neigung (0,5 g ~ 6 rad/s)
 constexpr float kTiltDead = 0.05f;               // Totzone in g
 constexpr float kTiltSign = 1.f;                 // -1, falls das Geraet die Neigung verkehrt herum meldet
+constexpr float kLineW   = 9.f;                  // GEZEICHNETE Liniendicke in px (nur Optik; Physik bleibt bei kWallR = 5 px)
 constexpr float kMaxW    = 8.f;                 // max. Winkelgeschwindigkeit des Kastens (rad/s)
 constexpr float kPartR   = 2.f / kPPM;
 constexpr int   kFluidWin = 1;                  // Partikel im Ziel zum Gewinnen
@@ -44,7 +45,6 @@ BoxScene* BoxScene::create()
 
 BoxScene::~BoxScene()
 {
-    stopSquish();
     setAccelerometer(false);
     if (B2_IS_NON_NULL(_world)) b2DestroyWorld(_world);
 }
@@ -66,7 +66,7 @@ bool BoxScene::init()
     kb->onKeyPressed = [this](KeyboardEvent* e) {
         using K = KeyboardEvent::KeyCode;
         K k = e->getKeyCode();
-        if (k == K::KEY_M) { _sfxOn = !_sfxOn; if (!_sfxOn) stopSquish(); sfx(Sfx::Click); return; }   // Ton an/aus
+        if (k == K::KEY_M) { _sfxOn = !_sfxOn; sfx(Sfx::Click); return; }   // Ton an/aus
         if (k == K::KEY_C && _state == State::Menu) { _control = _control == Control::Buttons ? Control::Tilt : Control::Buttons; sfx(Sfx::Select); return; }   // Steuerung
         if (k == K::KEY_G && _state != State::Editor) { _shineOn = !_shineOn; sfx(Sfx::Select); return; }   // Glanz an/aus
         if (_state == State::Menu)
@@ -121,7 +121,7 @@ bool BoxScene::init()
         {
             auto begin = [this]() { if (_editorOn) startEditor(); else startGame(); };
             const float cx = kWin / 2;
-            if (p.x > 585 && p.x < 635 && p.y > 585 && p.y < 635) { _sfxOn = !_sfxOn; if (!_sfxOn) stopSquish(); sfx(Sfx::Click); }   // Lautsprecher
+            if (p.x > 585 && p.x < 635 && p.y > 585 && p.y < 635) { _sfxOn = !_sfxOn; sfx(Sfx::Click); }   // Lautsprecher
             else if (p.x > 20 && p.x < 140 && p.y > 560 && p.y < 622) { _control = p.x < 80 ? Control::Buttons : Control::Tilt; sfx(Sfx::Select); }   // Steuerung
             else if (p.x > 30 && p.x < 130 && p.y > 85 && p.y < 160) { _shineOn = !_shineOn; sfx(Sfx::Select); }   // Glanz-Schalter
             else if (p.x > 520 && p.x < 600 && p.y > 85 && p.y < 135) { _editorOn = !_editorOn; sfx(Sfx::Select); }      // Editor-Schalter
@@ -410,7 +410,6 @@ int BoxScene::countParticlesInGoal() const
 
 void BoxScene::update(float dt)
 {
-    if (_state != State::Play) stopSquish();
     setAccelerometer(_state == State::Play && _control == Control::Tilt);
     if (_state == State::Editor)
     {
@@ -429,7 +428,6 @@ void BoxScene::update(float dt)
     }
     if (_won)
     {
-        stopSquish();
         _menuT += dt;
         _winTimer += dt;
         if (_fromEditor && _winTimer > 1.5f)
@@ -461,13 +459,7 @@ void BoxScene::update(float dt)
 
     // Geschwindigkeiten vor dem Schritt merken: ein ploetzlicher Sprung = Aufprall (Gravitation allein macht nur ~0,4 m/s)
     b2Vec2 ballV0{0.f, 0.f};
-    std::vector<b2Vec2> partV0;
     if (_mode == Mode::Ball) ballV0 = b2Body_GetLinearVelocity(_ball);
-    else
-    {
-        partV0.reserve(_parts.size());
-        for (b2BodyId id : _parts) partV0.push_back(b2Body_GetLinearVelocity(id));
-    }
 
     if (_mode == Mode::Fluid) stepFluid();
     for (int i = 0; i < 3; ++i)
@@ -482,17 +474,6 @@ void BoxScene::update(float dt)
         float dv = std::sqrt(d.x * d.x + d.y * d.y);
         if (dv > 3.f) sfx(Sfx::HitHard, std::min(1.f, dv / 8.f));
         else if (dv > 1.2f) sfx(Sfx::HitSoft, std::min(1.f, dv / 4.f));
-    }
-    else
-    {
-        // Kein Aufprall-Sound mehr fuer den Schleim: nur ein loopendes "Squosh", solange er sich bewegt
-        float sum = 0.f;
-        for (b2BodyId id : _parts)
-        {
-            b2Vec2 v = b2Body_GetLinearVelocity(id);
-            sum += std::sqrt(v.x * v.x + v.y * v.y);
-        }
-        updateSquish(_parts.empty() ? 0.f : sum / (float)_parts.size());
     }
 
     b2Vec2 g = toV(b2Body_GetWorldPoint(_boxBody, _goalLocal));
@@ -553,15 +534,15 @@ void BoxScene::drawAll()
             Vec2 b = px(toV(b2Body_GetWorldPoint(_boxBody, s.b)));
             if (pass == 0)
             {
-                _draw->drawLine(Vec2(a.x + 2.f, a.y - 3.f), Vec2(b.x + 2.f, b.y - 3.f), Color(0.f, 0.f, 0.25f, 0.20f), 7.f);
+                _draw->drawLine(Vec2(a.x + 2.5f, a.y - 3.5f), Vec2(b.x + 2.5f, b.y - 3.5f), Color(0.f, 0.f, 0.25f, 0.20f), kLineW + 2.f);
                 continue;
             }
-            _draw->drawLine(a, b, ink, 5.f);
-            _draw->drawLine(Vec2(a.x - 0.8f, a.y + 0.8f), Vec2(b.x - 0.8f, b.y + 0.8f), Color(0.55f, 0.70f, 1.f, 0.65f), 1.4f);   // Glanzlinie
+            _draw->drawLine(a, b, ink, kLineW);
+            _draw->drawLine(Vec2(a.x - 1.2f, a.y + 1.2f), Vec2(b.x - 1.2f, b.y + 1.2f), Color(0.55f, 0.70f, 1.f, 0.65f), 2.f);   // Glanzlinie
             for (const Vec2& p : {a, b})   // runde Endkappen mit Glanz
             {
-                _draw->drawDot(p, 5.f, ink);
-                _draw->drawDot(Vec2(p.x - 0.8f, p.y + 0.8f), 2.4f, Color(0.60f, 0.75f, 1.f, 1.f));
+                _draw->drawDot(p, kLineW * 0.5f, ink);
+                _draw->drawDot(Vec2(p.x - 1.2f, p.y + 1.2f), kLineW * 0.25f, Color(0.60f, 0.75f, 1.f, 1.f));
             }
         }
 
@@ -1271,7 +1252,7 @@ void BoxScene::playTouch(int phase, intptr_t id, Vec2 p)
     if (_control == Control::Buttons && near(Vec2(70.f, 64.f), 58.f)) { _tLeft = true;  _tLId = id; }
     else if (_control == Control::Buttons && near(Vec2(570.f, 64.f), 58.f)) { _tRight = true; _tRId = id; }
     else if (near(Vec2(320.f, 46.f), 36.f)) { _state = _fromEditor ? State::Editor : State::Menu; sfx(Sfx::Click); }
-    else if (near(Vec2(kWin - 30.f, 545.f), 28.f)) { _sfxOn = !_sfxOn; if (!_sfxOn) stopSquish(); sfx(Sfx::Click); }
+    else if (near(Vec2(kWin - 30.f, 545.f), 28.f)) { _sfxOn = !_sfxOn; sfx(Sfx::Click); }
 }
 
 void BoxScene::drawTouchButtons()
@@ -1357,37 +1338,6 @@ void BoxScene::drawSpeaker(Vec2 c, bool on)
         _draw->drawLine(Vec2(c.x + 9.f, c.y - 7.f), Vec2(c.x + 19.f, c.y + 7.f), red, 3.f);   // durchgestrichen
         _draw->drawLine(Vec2(c.x + 9.f, c.y + 7.f), Vec2(c.x + 19.f, c.y - 7.f), red, 3.f);
     }
-}
-
-// Loopendes Schleim-Geraeusch: startet ab einem Mindesttempo, Lautstaerke und Tonhoehe folgen dem (geglaetteten) Tempo,
-// Hysterese verhindert Flackern. Beim Stillstand (oder Ton aus / Menue / Editor / Sieg) wird es gestoppt.
-void BoxScene::updateSquish(float speed)
-{
-    if (!_sfxOn) { stopSquish(); return; }
-    _squishSm += (speed - _squishSm) * 0.2f;
-    const bool playing = _squishId != AudioEngine::INVALID_AUDIO_ID;
-    if (!playing && _squishSm > 0.30f)
-        _squishId = AudioEngine::play2d("sfx/squosh.wav", true, 0.f);
-    else if (playing && _squishSm < 0.12f)
-    {
-        stopSquish();
-        return;
-    }
-    if (_squishId != AudioEngine::INVALID_AUDIO_ID)
-    {
-        AudioEngine::setVolume(_squishId, std::min(1.f, 0.15f + _squishSm / 2.5f) * 0.9f);
-        AudioEngine::setPitch(_squishId, 0.85f + std::min(_squishSm / 6.f, 0.5f));
-    }
-}
-
-void BoxScene::stopSquish()
-{
-    if (_squishId != AudioEngine::INVALID_AUDIO_ID)
-    {
-        AudioEngine::stop(_squishId);
-        _squishId = AudioEngine::INVALID_AUDIO_ID;
-    }
-    _squishSm = 0.f;
 }
 
 void BoxScene::setAccelerometer(bool on)

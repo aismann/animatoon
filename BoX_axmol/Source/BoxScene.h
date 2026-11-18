@@ -28,8 +28,6 @@ private:
     void drawControlSwitch(ax::Vec2 c);   // Menue: Umschalter Tasten <-> Neigung (Beschleunigungssensor)
     void setAccelerometer(bool on);
     bool editorButton(ax::Vec2 world);
-    void updateSquish(float speed);   // Schleim in Bewegung: loopendes "Squosh" (Lautstaerke/Tonhoehe nach Tempo)
-    void stopSquish();
     void drawMenu();
     void drawNumber(int n, ax::Vec2 pos, float size);
     void enforceBounds();
@@ -84,8 +82,6 @@ private:
 
     bool _shineOn = false;                    // Schleim-Glanz an/aus (Standard: aus; Schalter im Menue, Taste G)
     float _shAnim = 0.f;                      // Animation des Glanz-Schalters 0..1
-    ax::AudioId _squishId = ax::AudioEngine::INVALID_AUDIO_ID;
-    float _squishSm = 0.f;                    // geglaettetes Schleim-Tempo
     bool _sfxOn = false;                      // Ton an/aus (Standard: aus; M oder Klick auf Lautsprecher)
     float _lastSfx[(int)Sfx::Count] = {};
 
