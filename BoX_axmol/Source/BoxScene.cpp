@@ -20,6 +20,9 @@ constexpr float kTiltSign = 1.f;                 // -1, falls das Geraet die Nei
 constexpr float kLineW   = 9.f;                  // GEZEICHNETE Liniendicke in px (nur Optik; Physik bleibt bei kWallR = 5 px)
 constexpr float kMetaBaseR  = 20.f;              // Basis-Kernradius der Metaballs in px (Skalierung 1)
 constexpr float kFluidDrawR = 14.f;              // GLOBAL: Kernradius des gezeichneten Schleims im Spiel in px (kleiner = kleinere Kreise)
+// Sichtbarer Radius eines Schleim-Partikels: der Iso-Rand (Schwelle 0,28) liegt bei ~0,69 x Kernradius. Fuer "Ziel beruehrt" zaehlt
+// dieser gezeichnete Radius, nicht der winzige Physik-Radius kPartR (2 px) - sonst sieht man den Schleim das Ziel beruehren, ohne dass gewonnen wird.
+constexpr float kFluidTouchR = kFluidDrawR * 0.69f / kPPM;
 constexpr float kMaxW    = 8.f;                 // max. Winkelgeschwindigkeit des Kastens (rad/s)
 constexpr float kPartR   = 2.f / kPPM;
 constexpr int   kFluidWin = 1;                  // Partikel im Ziel zum Gewinnen
@@ -406,7 +409,7 @@ int BoxScene::countParticlesInGoal() const
     {
         b2Vec2 p = toV(b2Body_GetPosition(id));
         b2Vec2 d = b2Sub(p, g);
-        if (d.x * d.x + d.y * d.y < (_goalR + kPartR) * (_goalR + kPartR)) ++cnt;
+        if (d.x * d.x + d.y * d.y < (_goalR + kFluidTouchR) * (_goalR + kFluidTouchR)) ++cnt;
     }
     return cnt;
 }

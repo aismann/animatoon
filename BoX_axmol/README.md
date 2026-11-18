@@ -81,3 +81,6 @@ Partikel im Ziel. Geprueft wird nach jedem Physik-Substep (3 pro Frame), damit s
 
 Schleim-Groesse: globale Konstante `kFluidDrawR` (Anfang von `BoxScene.cpp`, Standard 14 px; vorher 20 px) = Kernradius der gezeichneten
 Metaball-Kreise im Spiel. Kleiner = kleinere Kreise; Ringabstaende und Glanz skalieren mit. Die Physik (`kPartR`) bleibt unveraendert.
+
+Schleim-Ziel: "beruehrt" zaehlt mit dem sichtbaren Partikelradius (`kFluidTouchR` = 0,69 x `kFluidDrawR`), nicht mit dem Physik-Radius `kPartR`.
+Mit `kFluidWin = 1` gewinnt also schon ein einzelner Tropfen, sobald seine gezeichnete Kante das Ziel beruehrt.
